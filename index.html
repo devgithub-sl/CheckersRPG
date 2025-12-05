@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPG Checkers</title>
+    <style>
+        /* --- CSS STYLES --- */
+        :root {
+            --slate-900: #0f172a;
+            --slate-950: #020617;
+            --slate-800: #1e293b;
+            --slate-700: #334155;
+            --slate-400: #94a3b8;
+            --slate-100: #f1f5f9;
+            --red-600: #dc2626;
+            --red-400: #f87171;
+            --blue-600: #2563eb;
+            --blue-400: #60a5fa;
+            --amber-100: #fef3c7;
+            --stone-800: #292524;
+            --yellow-500: #eab308;
+        }
+
+        body {
+            margin: 0;
+            font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+            background-color: var(--slate-900);
+            color: var(--slate-100);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Layout */
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .game-container { flex-direction: row; }
+        }
+
+        /* Panels */
+        .player-panel {
+            flex: 1;
+            padding: 1rem;
+            background-color: rgba(15, 23, 42, 0.5);
+            border-bottom: 1px solid var(--slate-700);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        @media (min-width: 768px) {
+            .player-panel.left { border-right: 1px solid var(--slate-700); border-bottom: none; }
+            .player-panel.right { border-left: 1px solid var(--slate-700); border-bottom: none; }
+        }
+
+        /* Header & Avatar */
+        .player-header { display: flex; align-items: center; gap: 1rem; }
+        .player-header.reverse { flex-direction: row-reverse; text-align: right; }
+        
+        .avatar {
+            width: 3rem;
+            height: 3rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            border: 2px solid;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+        }
+        .avatar.red { background: var(--red-600); border-color: var(--red-400); box-shadow: 0 0 15px rgba(220, 38, 38, 0.5); }
+        .avatar.blue { background: var(--blue-600); border-color: var(--blue-400); box-shadow: 0 0 15px rgba(37, 99, 235, 0.5); }
+
+        .player-name { font-size: 1.25rem; font-weight: bold; margin: 0; }
+        .player-lvl { font-size: 0.8rem; color: var(--slate-400); }
+        .text-red { color: var(--red-400); }
+        .text-blue { color: var(--blue-400); }
+
+        /* Bars */
+        .stat-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0.5rem; }
+        .stat-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--slate-400); }
+        .progress-bg { background: var(--slate-800); height: 8px; border-radius: 99px; overflow: hidden; position: relative; }
+        .progress-bg.mana { height: 16px; border: 1px solid var(--slate-700); }
+        .progress-fill { height: 100%; transition: width 0.3s ease; }
+        .fill-xp { background: var(--yellow-500); }
+        .fill-mana { background: linear-gradient(90deg, var(--blue-600), var(--blue-400)); }
+        .mana-text { position: absolute; width: 100%; text-align: center; font-size: 10px; line-height: 14px; font-weight: bold; text-shadow: 0 1px 2px black; }
+
+        /* Spells */
+        .section-title { text-transform: uppercase; font-size: 0.75rem; color: var(--slate-400); font-weight: bold; margin-bottom: 0.5rem; }
+        .spell-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .spell-btn {
+            background: var(--slate-800); border: 1px solid var(--slate-700); color: white;
+            padding: 0.5rem; border-radius: 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+            transition: all 0.2s;
+        }
+        .spell-btn:hover:not(:disabled) { background: var(--slate-700); }
+        .spell-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .spell-icon { font-size: 1.25rem; }
+        .spell-name { font-size: 0.75rem; font-weight: bold; margin-top: 2px; }
+        .spell-cost { font-size: 0.65rem; color: var(--slate-400); }
+
+        /* Center Board Area */
+        .center-area {
+            flex: 2;
+            background: var(--slate-950);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 1rem;
+        }
+
+        .turn-indicator {
+            position: absolute; top: 1rem;
+            background: var(--slate-900); border: 1px solid var(--slate-700);
+            padding: 0.5rem 1.5rem; border-radius: 99px;
+            display: flex; align-items: center; gap: 0.5rem;
+            font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;
+            z-index: 10;
+        }
+        .turn-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .bg-red { background: var(--red-600); }
+        .bg-blue { background: var(--blue-600); }
+        .cancel-link { font-size: 0.75rem; color: var(--red-400); text-decoration: underline; cursor: pointer; margin-left: 10px; }
+
+        /* The Board */
+        .board-container {
+            width: 90vw; height: 90vw;
+            max-width: 600px; max-height: 600px;
+            background: var(--slate-800);
+            border: 4px solid var(--slate-700);
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .cell {
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .cell.light { background: var(--amber-100); }
+        .cell.dark { background: var(--stone-800); }
+        .cell.highlight { box-shadow: inset 0 0 0 4px var(--yellow-500); cursor: pointer; }
+        .cell.target { box-shadow: inset 0 0 0 4px #a855f7; cursor: pointer; }
+        .cell.dimmed { opacity: 0.4; }
+
+        /* Pieces */
+        .piece {
+            width: 80%; height: 80%; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            transition: transform 0.2s;
+            font-weight: bold; font-size: 0.8rem; color: rgba(255,255,255,0.7);
+        }
+        .piece.red { background: linear-gradient(135deg, #ef4444, #b91c1c); border: 2px solid #7f1d1d; }
+        .piece.blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: 2px solid #1e3a8a; }
+        .piece.king { border: 3px solid var(--yellow-500); }
+        .piece.selected { transform: scale(1.15); z-index: 10; border-color: white; }
+
+        .marker-dot { width: 12px; height: 12px; background: rgba(234, 179, 8, 0.5); border-radius: 50%; animation: pulse 1s infinite; }
+
+        /* Log */
+        .log-container {
+            width: 100%; max-width: 600px; height: 100px;
+            background: rgba(0,0,0,0.4); border: 1px solid var(--slate-700);
+            border-radius: 4px; margin-top: 1rem; padding: 0.5rem;
+            overflow-y: auto; font-family: monospace; font-size: 0.75rem;
+        }
+        .log-entry { margin-bottom: 2px; }
+        .log-combat { color: var(--red-400); }
+        .log-level { color: var(--yellow-500); }
+        .log-magic { color: #c084fc; }
+        .log-info { color: var(--slate-400); }
+
+        /* Modal */
+        .modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+            display: none; align-items: center; justify-content: center; z-index: 100;
+        }
+        .modal.active { display: flex; }
+        .modal-box {
+            background: var(--slate-800); padding: 2rem; border-radius: 1rem;
+            border: 2px solid var(--yellow-500); text-align: center;
+        }
+        .modal-btn {
+            background: var(--yellow-500); color: black; font-weight: bold; border: none;
+            padding: 0.75rem 2rem; border-radius: 4px; font-size: 1rem; cursor: pointer; margin-top: 1rem;
+        }
+
+        @keyframes pulse { 0% { opacity: 0.5; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0.5; transform: scale(0.9); } }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <!-- RED PANEL -->
+        <div class="player-panel left">
+            <div class="player-header">
+                <div class="avatar red">👹</div>
+                <div>
+                    <h2 class="player-name text-red">Red Warlocks</h2>
+                    <div class="player-lvl">Level <span id="red-lvl">1</span></div>
+                </div>
+            </div>
+            <!-- Stats -->
+            <div class="stat-group">
+                <div class="stat-label"><span>XP</span><span id="red-xp-text">0/100</span></div>
+                <div class="progress-bg"><div class="progress-fill fill-xp" id="red-xp-bar" style="width: 0%"></div></div>
+            </div>
+            <div class="stat-group">
+                <div class="stat-label"><span>Mana</span><span id="red-mana-text">2/5</span></div>
+                <div class="progress-bg mana">
+                    <div class="mana-text">+1 / turn</div>
+                    <div class="progress-fill fill-mana" id="red-mana-bar" style="width: 40%"></div>
+                </div>
+            </div>
+            <!-- Spells -->
+            <div class="section-title">Grimoire</div>
+            <div class="spell-grid">
+                <button class="spell-btn" id="btn-red-dash" onclick="game.activateSpell('dash')">
+                    <span class="spell-icon">⚡</span>
+                    <span class="spell-name">Dash</span>
+                    <span class="spell-cost">2 Mana</span>
+                </button>
+                <button class="spell-btn" id="btn-red-smite" onclick="game.activateSpell('smite')">
+                    <span class="spell-icon">🔥</span>
+                    <span class="spell-name">Smite</span>
+                    <span class="spell-cost">4 Mana</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- CENTER BOARD -->
+        <div class="center-area">
+            <div class="turn-indicator">
+                <div class="turn-dot" id="turn-dot"></div>
+                <span id="turn-text">RED'S TURN</span>
+                <span id="cancel-spell" class="cancel-link" style="display: none;" onclick="game.cancelSpell()">Cancel</span>
+            </div>
+
+            <div class="board-container" id="board">
+                <!-- Board generated by JS -->
+            </div>
+
+            <div class="log-container" id="game-log"></div>
+        </div>
+
+        <!-- BLUE PANEL -->
+        <div class="player-panel right">
+            <div class="player-header reverse">
+                <div class="avatar blue">🛡️</div>
+                <div>
+                    <h2 class="player-name text-blue">Blue Paladins</h2>
+                    <div class="player-lvl">Level <span id="blue-lvl">1</span></div>
+                </div>
+            </div>
+            <!-- Stats -->
+            <div class="stat-group">
+                <div class="stat-label"><span>XP</span><span id="blue-xp-text">0/100</span></div>
+                <div class="progress-bg"><div class="progress-fill fill-xp" id="blue-xp-bar" style="width: 0%"></div></div>
+            </div>
+            <div class="stat-group">
+                <div class="stat-label"><span>Mana</span><span id="blue-mana-text">2/5</span></div>
+                <div class="progress-bg mana">
+                    <div class="mana-text">+1 / turn</div>
+                    <div class="progress-fill fill-mana" id="blue-mana-bar" style="width: 40%"></div>
+                </div>
+            </div>
+             <!-- Spells -->
+             <div class="section-title" style="text-align: right;">Divine Powers</div>
+             <div class="spell-grid">
+                 <button class="spell-btn" id="btn-blue-dash" onclick="game.activateSpell('dash')">
+                     <span class="spell-icon">✨</span>
+                     <span class="spell-name">Dash</span>
+                     <span class="spell-cost">2 Mana</span>
+                 </button>
+                 <button class="spell-btn" id="btn-blue-smite" onclick="game.activateSpell('smite')">
+                     <span class="spell-icon">🔨</span>
+                     <span class="spell-name">Smite</span>
+                     <span class="spell-cost">4 Mana</span>
+                 </button>
+             </div>
+        </div>
+    </div>
+
+    <!-- WIN MODAL -->
+    <div class="modal" id="win-modal">
+        <div class="modal-box">
+            <div style="font-size: 4rem;">🏆</div>
+            <h2 id="winner-name" style="font-size: 2rem; text-transform: uppercase; margin: 10px 0;">WINNER!</h2>
+            <button class="modal-btn" onclick="game.reset()">New Game</button>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        const game = {
+            board: [],
+            turn: 'red',
+            selected: null, // {r, c}
+            activeSpell: null, // 'dash' | 'smite'
+            winner: null,
+            stats: {
+                red: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 },
+                blue: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 }
+            },
+
+            init() {
+                this.resetStats();
+                this.createBoard();
+                this.turn = 'red';
+                this.activeSpell = null;
+                this.winner = null;
+                this.log('Game Started! Red moves first.', 'info');
+                this.render();
+            },
+
+            reset() {
+                document.getElementById('win-modal').classList.remove('active');
+                this.init();
+            },
+
+            resetStats() {
+                this.stats = {
+                    red: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 },
+                    blue: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 }
+                };
+            },
+
+            createBoard() {
+                this.board = [];
+                for(let r=0; r<8; r++) {
+                    const row = [];
+                    for(let c=0; c<8; c++) {
+                        let piece = null;
+                        if((r+c)%2 !== 0) {
+                            if(r < 3) piece = { player: 'blue', isKing: false };
+                            if(r > 4) piece = { player: 'red', isKing: false };
+                        }
+                        row.push({ piece: piece, highlight: false, target: false });
+                    }
+                    this.board.push(row);
+                }
+            },
+
+            // --- INTERACTION ---
+
+            handleClick(r, c) {
+                if(this.winner) return;
+
+                if(this.activeSpell) {
+                    this.castSpell(r, c);
+                    return;
+                }
+
+                const cell = this.board[r][c];
+                
+                // 1. Select Piece
+                if(cell.piece && cell.piece.player === this.turn) {
+                    this.selected = {r, c};
+                    this.highlightMoves(r, c, cell.piece);
+                    this.render();
+                    return;
+                }
+
+                // 2. Move Piece
+                if(cell.highlight && this.selected) {
+                    this.movePiece(this.selected.r, this.selected.c, r, c);
+                }
+            },
+
+            highlightMoves(r, c, piece) {
+                // Reset highlights
+                this.board.forEach(row => row.forEach(cell => cell.highlight = false));
+
+                const moves = this.getValidMoves(r, c, piece);
+                moves.forEach(m => {
+                    this.board[m.r][m.c].highlight = true;
+                });
+            },
+
+            getValidMoves(r, c, piece) {
+                const moves = [];
+                const forward = piece.player === 'red' ? -1 : 1;
+                const dirs = piece.isKing ? [-1, 1] : [forward];
+
+                dirs.forEach(dr => {
+                    [-1, 1].forEach(dc => {
+                        const nr = r + dr, nc = c + dc;
+                        
+                        if(this.isValid(nr, nc)) {
+                            // Walk
+                            if(!this.board[nr][nc].piece) {
+                                moves.push({r: nr, c: nc});
+                            }
+                            // Jump
+                            else if(this.board[nr][nc].piece.player !== piece.player) {
+                                const jr = nr + dr, jc = nc + dc;
+                                if(this.isValid(jr, jc) && !this.board[jr][jc].piece) {
+                                    moves.push({r: jr, c: jc});
+                                }
+                            }
+                        }
+                    });
+                });
+                return moves;
+            },
+
+            movePiece(fr, fc, tr, tc) {
+                const piece = this.board[fr][fc].piece;
+                const isJump = Math.abs(tr - fr) > 1;
+
+                // Move
+                this.board[tr][tc].piece = piece;
+                this.board[fr][fc].piece = null;
+                this.selected = null;
+                this.board.forEach(row => row.forEach(c => c.highlight = false));
+
+                // Capture
+                if(isJump) {
+                    const midR = (fr + tr) / 2;
+                    const midC = (fc + tc) / 2;
+                    this.board[midR][midC].piece = null;
+                    this.log(`${this.turn.toUpperCase()} crushed an enemy!`, 'combat');
+                    this.gainXp(this.turn, 50);
+                }
+
+                // King Me
+                if((piece.player === 'red' && tr === 0) || (piece.player === 'blue' && tr === 7)) {
+                    if(!piece.isKing) {
+                        piece.isKing = true;
+                        this.log(`${this.turn.toUpperCase()} Promoted to King!`, 'level');
+                        this.gainXp(this.turn, 20);
+                    }
+                }
+
+                this.endTurn();
+            },
+
+            // --- SPELLS ---
+
+            activateSpell(spellName) {
+                if(this.activeSpell === spellName) {
+                    this.cancelSpell();
+                    return;
+                }
+                this.activeSpell = spellName;
+                
+                // Highlight targets
+                this.board.forEach((row, r) => row.forEach((cell, c) => {
+                    cell.target = false;
+                    cell.highlight = false; // clear move highlights
+                    
+                    if(spellName === 'smite') {
+                        // Target Enemy
+                        if(cell.piece && cell.piece.player !== this.turn) cell.target = true;
+                    } 
+                    else if(spellName === 'dash') {
+                        // Target Own
+                        if(cell.piece && cell.piece.player === this.turn) cell.target = true;
+                    }
+                }));
+                
+                this.log(`Casting ${spellName.toUpperCase()}... Select target.`, 'magic');
+                this.render();
+            },
+
+            cancelSpell() {
+                this.activeSpell = null;
+                this.board.forEach(row => row.forEach(cell => cell.target = false));
+                this.render();
+            },
+
+            castSpell(r, c) {
+                const cell = this.board[r][c];
+                if(!cell.target) return;
+
+                const player = this.turn;
+                const stats = this.stats[player];
+
+                if(this.activeSpell === 'smite') {
+                    stats.mana -= 4;
+                    cell.piece = null;
+                    this.log(`${player.toUpperCase()} Smited an enemy!`, 'magic');
+                    this.gainXp(player, 30);
+                    this.cancelSpell();
+                    this.endTurn();
+                }
+                else if(this.activeSpell === 'dash') {
+                    stats.mana -= 2;
+                    // Move piece 2 squares forward if possible
+                    const piece = cell.piece;
+                    const dir = player === 'red' ? -1 : 1;
+                    let tr = r + (dir * 2);
+                    // Clamp
+                    if(tr < 0) tr = 0; if(tr > 7) tr = 7;
+                    
+                    // Simple logic: if blocked, try 1 square, if blocked stay
+                    if(this.isValid(tr, c) && !this.board[tr][c].piece) {
+                        this.board[tr][c].piece = piece;
+                        this.board[r][c].piece = null;
+                        this.log('DASH successful!', 'magic');
+                    } else if (this.isValid(r+dir, c) && !this.board[r+dir][c].piece) {
+                        this.board[r+dir][c].piece = piece;
+                        this.board[r][c].piece = null;
+                        this.log('DASH successful (short)!', 'magic');
+                    } else {
+                        this.log('DASH fizzled (blocked)!', 'magic');
+                    }
+                    this.cancelSpell();
+                    this.endTurn();
+                }
+            },
+
+            // --- RPG LOGIC ---
+
+            gainXp(player, amount) {
+                const s = this.stats[player];
+                s.xp += amount;
+                if(s.xp >= s.xpNext) {
+                    s.level++;
+                    s.xp -= s.xpNext;
+                    s.xpNext = Math.floor(s.xpNext * 1.5);
+                    s.maxMana += 2;
+                    s.mana = s.maxMana;
+                    this.log(`${player.toUpperCase()} Leveled Up to ${s.level}!`, 'level');
+                }
+            },
+
+            endTurn() {
+                this.checkWin();
+                if(this.winner) return;
+
+                // Mana Regen for NEXT player
+                const next = this.turn === 'red' ? 'blue' : 'red';
+                if(this.stats[next].mana < this.stats[next].maxMana) {
+                    this.stats[next].mana++;
+                }
+
+                this.turn = next;
+                this.render();
+            },
+
+            checkWin() {
+                const redAlive = this.board.some(row => row.some(c => c.piece?.player === 'red'));
+                const blueAlive = this.board.some(row => row.some(c => c.piece?.player === 'blue'));
+                
+                if(!redAlive) this.winGame('blue');
+                if(!blueAlive) this.winGame('red');
+            },
+
+            winGame(winner) {
+                this.winner = winner;
+                document.getElementById('winner-name').textContent = winner + " WINS!";
+                document.getElementById('winner-name').style.color = winner === 'red' ? 'var(--red-400)' : 'var(--blue-400)';
+                document.getElementById('win-modal').classList.add('active');
+            },
+
+            isValid(r, c) { return r>=0 && r<8 && c>=0 && c<8; },
+
+            log(msg, type) {
+                const logEl = document.getElementById('game-log');
+                const entry = document.createElement('div');
+                entry.className = `log-entry log-${type}`;
+                entry.textContent = `> ${msg}`;
+                logEl.prepend(entry);
+            },
+
+            // --- RENDERING ---
+
+            render() {
+                // 1. Board
+                const boardEl = document.getElementById('board');
+                boardEl.innerHTML = '';
+                
+                this.board.forEach((row, r) => {
+                    row.forEach((cell, c) => {
+                        const cellDiv = document.createElement('div');
+                        cellDiv.className = `cell ${(r+c)%2===0 ? 'light' : 'dark'}`;
+                        if(cell.highlight) cellDiv.classList.add('highlight');
+                        if(cell.target) cellDiv.classList.add('target');
+                        
+                        // Dimming logic if spelling
+                        if(this.activeSpell && !cell.target) cellDiv.classList.add('dimmed');
+
+                        cellDiv.onclick = () => this.handleClick(r, c);
+
+                        if(cell.piece) {
+                            const p = document.createElement('div');
+                            p.className = `piece ${cell.piece.player}`;
+                            if(cell.piece.isKing) p.classList.add('king');
+                            if(this.selected && this.selected.r === r && this.selected.c === c) p.classList.add('selected');
+                            
+                            p.innerHTML = cell.piece.isKing ? '👑' : (cell.piece.player === 'red' ? 'W' : 'P');
+                            cellDiv.appendChild(p);
+                        } else if (cell.highlight) {
+                            const dot = document.createElement('div');
+                            dot.className = 'marker-dot';
+                            cellDiv.appendChild(dot);
+                        }
+
+                        boardEl.appendChild(cellDiv);
+                    });
+                });
+
+                // 2. Stats UI
+                this.updateStatUI('red');
+                this.updateStatUI('blue');
+
+                // 3. Buttons State
+                const currentMana = this.stats[this.turn].mana;
+                const isRed = this.turn === 'red';
+                const isBlue = this.turn === 'blue';
+
+                document.getElementById('btn-red-dash').disabled = !isRed || currentMana < 2;
+                document.getElementById('btn-red-smite').disabled = !isRed || currentMana < 4;
+                document.getElementById('btn-blue-dash').disabled = !isBlue || currentMana < 2;
+                document.getElementById('btn-blue-smite').disabled = !isBlue || currentMana < 4;
+
+                // 4. Turn Indicator
+                const dot = document.getElementById('turn-dot');
+                const txt = document.getElementById('turn-text');
+                const cancel = document.getElementById('cancel-spell');
+
+                dot.className = `turn-dot ${isRed ? 'bg-red' : 'bg-blue'}`;
+                
+                if(this.activeSpell) {
+                    txt.textContent = `CASTING: ${this.activeSpell.toUpperCase()}`;
+                    cancel.style.display = 'inline';
+                } else {
+                    txt.textContent = `${this.turn.toUpperCase()}'S TURN`;
+                    cancel.style.display = 'none';
+                }
+            },
+
+            updateStatUI(player) {
+                const s = this.stats[player];
+                document.getElementById(`${player}-lvl`).textContent = s.level;
+                document.getElementById(`${player}-xp-text`).textContent = `${s.xp}/${s.xpNext}`;
+                document.getElementById(`${player}-xp-bar`).style.width = `${(s.xp/s.xpNext)*100}%`;
+                document.getElementById(`${player}-mana-text`).textContent = `${s.mana}/${s.maxMana}`;
+                document.getElementById(`${player}-mana-bar`).style.width = `${(s.mana/s.maxMana)*100}%`;
+            }
+        };
+
+        // Start
+        game.init();
+
+    </script>
+</body>
+</html>
