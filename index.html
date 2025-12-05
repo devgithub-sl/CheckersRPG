@@ -444,7 +444,7 @@
 
         // --- LOBBY LOGIC ---
         window.lobby = {
-            createGame: async () => {
+            async createGame() {
                 if(!myUserId) return;
                 const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
                 myRole = 'red';
@@ -471,7 +471,7 @@
                 this.subscribeToGame(roomId);
             },
 
-            joinGame: async () => {
+            async joinGame() {
                 if(!myUserId) return;
                 const roomId = document.getElementById('room-code-input').value.toUpperCase();
                 if(roomId.length < 2) return;
@@ -502,7 +502,7 @@
                 }
             },
             
-            subscribeToGame: (roomId) => {
+            subscribeToGame(roomId) {
                 onSnapshot(doc(db, "games", roomId), (doc) => {
                     const data = doc.data();
                     if(!data) return;
