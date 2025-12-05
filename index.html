@@ -504,6 +504,15 @@
 
                     // Sync State
                     game.board = JSON.parse(data.board);
+                    
+                    // --- FIX: CLEAN GHOST HIGHLIGHTS ---
+                    // This ensures highlights/targets from the DB don't break the local game
+                    game.board.forEach(row => row.forEach(cell => {
+                        cell.highlight = false;
+                        cell.target = false;
+                    }));
+                    // -----------------------------------
+
                     game.turn = data.turn;
                     game.stats = data.stats;
                     game.forcedPiece = data.forcedPiece;
@@ -642,6 +651,7 @@
             },
 
             async movePiece(fr, fc, tr, tc) {
+                // CLONE STATE to modify
                 let nextBoard = JSON.parse(JSON.stringify(this.board));
                 let nextStats = JSON.parse(JSON.stringify(this.stats));
                 const piece = nextBoard[fr][fc].piece;
@@ -649,26 +659,32 @@
                 let logMsg = '';
                 let logType = 'info';
 
+                // Move
                 nextBoard[tr][tc].piece = piece;
                 nextBoard[fr][fc].piece = null;
-                
-                // CLEANUP VISUALS
+                // clear highlights in data
                 nextBoard.forEach(row => row.forEach(c => {
                     c.highlight = false;
-                    c.target = false;
+                    c.target = false; 
                 }));
 
                 let nextForcedPiece = null;
                 let turnEnds = true;
 
+                // Capture
                 if(isJump) {
-                    const midR = (fr + tr) / 2;
-                    const midC = (fc + tc) / 2;
-                    nextBoard[midR][midC].piece = null;
+                    // FIX: Use Math.floor to prevent '4.5' errors if coordinates are slightly off
+                    const midR = Math.floor((fr + tr) / 2);
+                    const midC = Math.floor((fc + tc) / 2);
+                    
+                    if (nextBoard[midR] && nextBoard[midR][midC]) {
+                        nextBoard[midR][midC].piece = null;
+                    }
                     
                     logMsg = `${this.turn.toUpperCase()} crushed an enemy!`;
                     logType = 'combat';
                     
+                    // XP Logic
                     nextStats[this.turn].xp += 50;
                     if(nextStats[this.turn].xp >= nextStats[this.turn].xpNext) {
                          nextStats[this.turn].level++;
@@ -679,7 +695,7 @@
                          logMsg += " And Leveled Up!";
                     }
 
-                    // COMBO LOGIC
+                    // COMBO CHECK
                     const forward = piece.player === 'red' ? -1 : 1;
                     const dirs = piece.isKing ? [-1, 1] : [forward];
                     let canJumpAgain = false;
@@ -702,7 +718,10 @@
                         logMsg += " COMBO!";
                     }
                 }
-
+                
+                // ... (Rest of movePiece function stays the same) ...
+                
+                // King Me
                 if((piece.player === 'red' && tr === 0) || (piece.player === 'blue' && tr === 7)) {
                     if(!piece.isKing) {
                         piece.isKing = true;
@@ -714,12 +733,15 @@
                     }
                 }
 
+                // Turn End Logic
                 let nextTurn = this.turn;
                 if (turnEnds) {
                     nextTurn = this.turn === 'red' ? 'blue' : 'red';
+                    // Mana Regen
                     if(nextStats[nextTurn].mana < nextStats[nextTurn].maxMana) {
                         nextStats[nextTurn].mana++;
                     }
+                    // Tick Frozen
                     nextBoard.forEach(row => row.forEach(cell => {
                         if (cell.piece && cell.piece.player === nextTurn && cell.piece.frozen > 0) {
                             cell.piece.frozen--;
