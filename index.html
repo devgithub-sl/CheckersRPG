@@ -2,210 +2,419 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>RPG Checkers: Stable Core</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPG Checkers: Multiplayer</title>
     <style>
+        /* --- CSS STYLES --- */
         :root {
-            --bg: #1a1a1a;
-            --panel: #2d2d2d;
-            --text: #e0e0e0;
-            --red: #ff4444;
-            --blue: #4488ff;
-            --gold: #ffd700;
+            --slate-900: #0f172a;
+            --slate-950: #020617;
+            --slate-800: #1e293b;
+            --slate-700: #334155;
+            --slate-400: #94a3b8;
+            --slate-100: #f1f5f9;
+            --red-600: #dc2626;
+            --red-400: #f87171;
+            --blue-600: #2563eb;
+            --blue-400: #60a5fa;
+            --cyan-500: #06b6d4;
+            --amber-100: #fef3c7;
+            --stone-800: #292524;
+            --yellow-500: #eab308;
         }
 
         body {
-            background: var(--bg); color: var(--text);
-            font-family: sans-serif; margin: 0;
-            display: flex; flex-direction: column; align-items: center;
-            height: 100vh; overflow: hidden;
+            margin: 0;
+            font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+            background-color: var(--slate-900);
+            color: var(--slate-100);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
         }
 
-        /* --- LOBBY --- */
-        #lobby {
-            position: fixed; inset: 0; background: var(--bg); z-index: 100;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: 20px;
+        /* Layout */
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            filter: blur(0px);
+            transition: filter 0.3s;
         }
-        .card {
-            background: var(--panel); padding: 40px; border-radius: 10px;
-            text-align: center; border: 1px solid #444; width: 300px;
-        }
-        input, button {
-            display: block; width: 100%; margin: 10px 0; padding: 10px;
-            border-radius: 5px; border: none; font-size: 16px;
-        }
-        button { cursor: pointer; font-weight: bold; background: #555; color: white; }
-        button:hover { background: #666; }
-        button.primary { background: var(--blue); }
-
-        /* --- GAME LAYOUT --- */
-        #game {
-            display: none; width: 100%; height: 100%;
-            flex-direction: row; /* Desktop layout default */
-        }
-
-        .panel {
-            width: 250px; background: var(--panel); padding: 20px;
-            display: flex; flex-direction: column; gap: 20px;
-            border-right: 1px solid #444;
-        }
-        .panel.right { border-left: 1px solid #444; border-right: none; }
-
-        .board-area {
-            flex: 1; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; position: relative;
-        }
-
-        /* --- STATS & SPELLS --- */
-        .player-card { text-align: center; border: 2px solid transparent; padding: 10px; border-radius: 8px; }
-        .player-card.active { border-color: var(--gold); background: #333; }
         
-        .stat-bar { height: 8px; background: #111; margin: 5px 0; border-radius: 4px; overflow: hidden; }
-        .fill { height: 100%; transition: width 0.3s; }
-        .fill-xp { background: var(--gold); }
-        .fill-mana { background: var(--blue); }
-
-        .btn-spell {
-            padding: 10px; margin: 5px 0; background: #444; color: white;
-            border: 1px solid #555; border-radius: 5px; cursor: pointer;
-            display: flex; justify-content: space-between; align-items: center;
+        /* Blur background when lobby is open */
+        body.in-lobby .game-container {
+            filter: blur(10px);
+            pointer-events: none;
         }
-        .btn-spell:disabled { opacity: 0.3; cursor: not-allowed; }
-        .btn-spell.active { border-color: var(--gold); background: #554400; }
 
-        /* --- BOARD --- */
-        #board {
-            display: grid; grid-template-columns: repeat(8, 60px); grid-template-rows: repeat(8, 60px);
-            border: 5px solid #444; background: #000;
+        @media (min-width: 768px) {
+            .game-container { flex-direction: row; }
         }
-        .cell { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; position: relative; }
-        .cell.light { background: #e0e0e0; }
-        .cell.dark { background: #444; }
+
+        /* Panels */
+        .player-panel {
+            flex: 1;
+            padding: 1rem;
+            background-color: rgba(15, 23, 42, 0.5);
+            border-bottom: 1px solid var(--slate-700);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            overflow-y: auto;
+        }
+
+        @media (min-width: 768px) {
+            .player-panel.left { border-right: 1px solid var(--slate-700); border-bottom: none; }
+            .player-panel.right { border-left: 1px solid var(--slate-700); border-bottom: none; }
+        }
+
+        /* Header & Avatar */
+        .player-header { display: flex; align-items: center; gap: 1rem; }
+        .player-header.reverse { flex-direction: row-reverse; text-align: right; }
         
+        .avatar {
+            width: 3rem;
+            height: 3rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            border: 2px solid;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+            transition: transform 0.3s;
+        }
+        .avatar.active { transform: scale(1.1); box-shadow: 0 0 20px currentColor; }
+        .avatar.red { color: var(--red-400); background: var(--red-600); border-color: var(--red-400); }
+        .avatar.blue { color: var(--blue-400); background: var(--blue-600); border-color: var(--blue-400); }
+
+        .player-name { font-size: 1.25rem; font-weight: bold; margin: 0; }
+        .player-lvl { font-size: 0.8rem; color: var(--slate-400); }
+        .text-red { color: var(--red-400); }
+        .text-blue { color: var(--blue-400); }
+
+        /* Bars */
+        .stat-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0.5rem; }
+        .stat-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--slate-400); }
+        .progress-bg { background: var(--slate-800); height: 8px; border-radius: 99px; overflow: hidden; position: relative; }
+        .progress-bg.mana { height: 16px; border: 1px solid var(--slate-700); }
+        .progress-fill { height: 100%; transition: width 0.3s ease; }
+        .fill-xp { background: var(--yellow-500); }
+        .fill-mana { background: linear-gradient(90deg, var(--blue-600), var(--blue-400)); }
+        .mana-text { position: absolute; width: 100%; text-align: center; font-size: 10px; line-height: 14px; font-weight: bold; text-shadow: 0 1px 2px black; }
+
+        /* Spells */
+        .section-title { text-transform: uppercase; font-size: 0.75rem; color: var(--slate-400); font-weight: bold; margin-bottom: 0.5rem; }
+        .spell-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .spell-btn {
+            background: var(--slate-800); border: 1px solid var(--slate-700); color: white;
+            padding: 0.5rem; border-radius: 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+            transition: all 0.2s; position: relative; overflow: hidden;
+        }
+        .spell-btn:hover:not(:disabled) { background: var(--slate-700); border-color: var(--slate-400); }
+        .spell-btn:active:not(:disabled) { transform: translateY(1px); }
+        .spell-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
+        
+        .spell-icon { font-size: 1.5rem; margin-bottom: 0.25rem; }
+        .spell-name { font-size: 0.75rem; font-weight: bold; }
+        .spell-cost { font-size: 0.65rem; color: var(--slate-400); }
+
+        /* Center Board Area */
+        .center-area {
+            flex: 2;
+            background: var(--slate-950);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 1rem;
+        }
+
+        .turn-indicator {
+            position: absolute; top: 1rem;
+            background: var(--slate-900); border: 1px solid var(--slate-700);
+            padding: 0.5rem 1.5rem; border-radius: 99px;
+            display: flex; align-items: center; gap: 0.5rem;
+            font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;
+            z-index: 20; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+        .turn-indicator.combo { border-color: var(--yellow-500); animation: pulse-border 1s infinite; }
+        
+        .turn-dot { width: 10px; height: 10px; border-radius: 50%; transition: background 0.3s; }
+        .bg-red { background: var(--red-600); }
+        .bg-blue { background: var(--blue-600); }
+        .cancel-link { font-size: 0.75rem; color: var(--red-400); text-decoration: underline; cursor: pointer; margin-left: 10px; }
+
+        /* The Board */
+        .board-container {
+            width: 90vw; height: 90vw;
+            max-width: 600px; max-height: 600px;
+            background: var(--slate-800);
+            border: 4px solid var(--slate-700);
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.1s;
+        }
+        .board-container.shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+
+        .cell {
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .cell.light { background: var(--amber-100); }
+        .cell.dark { background: var(--stone-800); }
         .cell.highlight { cursor: pointer; }
+        /* Dot Overlay for moves */
         .cell.highlight::after {
-            content: ''; width: 20px; height: 20px; background: rgba(255, 215, 0, 0.6);
-            border-radius: 50%; position: absolute; pointer-events: none;
+            content: ''; position: absolute; width: 30%; height: 30%;
+            background: rgba(234, 179, 8, 0.6); border-radius: 50%;
+            animation: pulse 1.5s infinite;
         }
-        .cell.target { box-shadow: inset 0 0 0 4px #a855f7; cursor: pointer; }
+        
+        .cell.target { cursor: pointer; box-shadow: inset 0 0 0 4px #a855f7; }
+        .cell.dimmed { filter: brightness(0.4); }
 
+        /* Pieces */
         .piece {
-            width: 45px; height: 45px; border-radius: 50%;
-            border: 3px solid rgba(0,0,0,0.3); font-weight: bold; font-size: 24px;
-            display: flex; align-items: center; justify-content: center; color: white;
-            position: relative; z-index: 10; transition: transform 0.2s;
+            width: 80%; height: 80%; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            transition: transform 0.2s, filter 0.3s;
+            font-weight: bold; font-size: 1rem; color: rgba(255,255,255,0.9);
+            position: relative;
+            z-index: 5;
         }
-        .piece.red { background: var(--red); }
-        .piece.blue { background: var(--blue); }
-        .piece.king { border-color: var(--gold); color: var(--gold); }
-        .piece.selected { transform: scale(1.2); box-shadow: 0 0 10px white; }
+        .piece.red { background: linear-gradient(135deg, #ef4444, #b91c1c); border: 2px solid #7f1d1d; }
+        .piece.blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: 2px solid #1e3a8a; }
+        .piece.king { border: 3px solid var(--yellow-500); text-shadow: 0 2px 4px black; }
+        .piece.selected { transform: scale(1.15) translateY(-2px); z-index: 10; border-color: white; }
         
-        /* Status Icons */
-        .piece.frozen::after { content: '❄️'; font-size: 20px; position: absolute; }
-        .piece.shielded { box-shadow: 0 0 0 3px #00ff00; }
-
-        /* --- LOGS & MODALS --- */
-        #logs {
-            position: absolute; bottom: 20px; width: 600px; height: 100px;
-            background: rgba(0,0,0,0.7); overflow-y: auto; padding: 10px;
-            border-radius: 5px; pointer-events: none; font-family: monospace;
+        /* Frozen State */
+        .piece.frozen::after {
+            content: '❄️'; font-size: 1.2rem; position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-shadow: 0 0 5px white;
         }
-        .log-line { margin-bottom: 2px; text-shadow: 1px 1px 0 #000; }
+        .piece.frozen { filter: brightness(1.2) hue-rotate(180deg) saturate(1.5); border-color: var(--cyan-500); }
 
-        #turn-display {
-            position: absolute; top: 20px; background: #333; padding: 10px 30px;
-            border-radius: 20px; font-weight: bold; letter-spacing: 2px;
-            border: 2px solid #555;
+        /* Log */
+        .log-container {
+            width: 100%; max-width: 600px; height: 120px;
+            background: rgba(0,0,0,0.4); border: 1px solid var(--slate-700);
+            border-radius: 4px; margin-top: 1rem; padding: 0.5rem;
+            overflow-y: auto; font-family: monospace; font-size: 0.75rem;
         }
+        .log-entry { margin-bottom: 3px; border-left: 2px solid transparent; padding-left: 5px; }
+        .log-combat { color: var(--red-400); border-color: var(--red-400); }
+        .log-level { color: var(--yellow-500); border-color: var(--yellow-500); }
+        .log-magic { color: #c084fc; border-color: #c084fc; }
+        .log-info { color: var(--slate-400); }
+
+        /* LOBBY OVERLAY */
+        #lobby-overlay {
+            position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95);
+            z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .lobby-box {
+            background: var(--slate-800); padding: 3rem; border-radius: 1rem;
+            border: 1px solid var(--slate-700); text-align: center;
+            max-width: 400px; width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .lobby-title { font-size: 2rem; font-weight: bold; margin-bottom: 2rem; color: var(--slate-100); }
+        .lobby-btn {
+            width: 100%; padding: 1rem; margin-bottom: 1rem;
+            background: var(--blue-600); border: none; border-radius: 0.5rem;
+            color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer;
+            transition: background 0.2s;
+        }
+        .lobby-btn:hover { background: var(--blue-400); }
+        .lobby-btn.secondary { background: var(--slate-700); }
+        .lobby-btn.secondary:hover { background: var(--slate-600); }
         
-        /* Cancel Button */
-        #cancel-btn { 
-            display: none; position: absolute; top: 70px; 
-            padding: 5px 15px; background: #ff4444; border: none; color: white; cursor: pointer;
+        .lobby-input {
+            width: 100%; padding: 1rem; margin-bottom: 1rem;
+            background: var(--slate-950); border: 1px solid var(--slate-700);
+            border-radius: 0.5rem; color: white; font-size: 1.2rem; text-align: center;
+            text-transform: uppercase; letter-spacing: 2px;
+            box-sizing: border-box; /* Fix padding issues */
         }
+        .lobby-status { margin-top: 1rem; color: var(--yellow-500); font-family: monospace; min-height: 1.5em; }
+
+        /* Modal */
+        .modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+            display: none; align-items: center; justify-content: center; z-index: 100;
+            backdrop-filter: blur(4px);
+        }
+        .modal.active { display: flex; }
+        .modal-box {
+            background: var(--slate-800); padding: 2.5rem; border-radius: 1rem;
+            border: 2px solid var(--yellow-500); text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .modal-btn {
+            background: var(--yellow-500); color: black; font-weight: bold; border: none;
+            padding: 0.75rem 2rem; border-radius: 4px; font-size: 1rem; cursor: pointer; margin-top: 1.5rem;
+            transition: transform 0.1s;
+        }
+        .modal-btn:hover { transform: scale(1.05); }
+
+        @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.5; } 50% { transform: scale(1.1); opacity: 0.8; } 100% { transform: scale(0.9); opacity: 0.5; } }
+        @keyframes pulse-border { 0% { border-color: var(--yellow-500); } 50% { border-color: transparent; } 100% { border-color: var(--yellow-500); } }
+        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
 </head>
-<body>
+<body class="in-lobby">
 
-    <!-- LOBBY -->
-    <div id="lobby">
-        <div class="card">
-            <h1>RPG CHECKERS</h1>
-            <button class="primary" onclick="app.createGame()">CREATE ROOM</button>
-            <p>— OR —</p>
-            <input id="room-code" placeholder="ENTER 4-DIGIT CODE" maxlength="4" style="text-transform:uppercase;">
-            <button onclick="app.joinGame()">JOIN ROOM</button>
-            <div id="lobby-status" style="color: var(--gold); margin-top: 10px;"></div>
+    <!-- LOBBY SCREEN -->
+    <div id="lobby-overlay">
+        <div class="lobby-box" id="lobby-main">
+            <div class="lobby-title">RPG CHECKERS</div>
+            <button class="lobby-btn" onclick="lobby.createGame()">CREATE GAME</button>
+            <div style="margin: 1rem 0; color: var(--slate-400); font-size: 0.9rem;">— OR —</div>
+            <input type="text" id="room-code-input" class="lobby-input" placeholder="ENTER ROOM CODE" maxlength="6">
+            <button class="lobby-btn secondary" onclick="lobby.joinGame()">JOIN GAME</button>
+            <div class="lobby-status" id="lobby-status"></div>
         </div>
-        <div id="waiting" class="card" style="display: none;">
-            <h2>WAITING...</h2>
-            <p>Room Code:</p>
-            <h1 id="display-code" style="color: var(--gold); letter-spacing: 5px;">----</h1>
-            <p>Share this with your opponent.</p>
-        </div>
-    </div>
-
-    <!-- GAME UI -->
-    <div id="game">
-        <!-- LEFT PANEL (RED) -->
-        <div class="panel">
-            <div class="player-card" id="card-red">
-                <h2>RED WARLOCKS</h2>
-                <div>LVL <span id="lvl-red">1</span></div>
-                <div class="stat-bar"><div class="fill fill-xp" id="xp-red" style="width:0%"></div></div>
-                <div class="stat-bar"><div class="fill fill-mana" id="mana-red" style="width:100%"></div></div>
-                <div>Mana: <span id="mana-text-red">2/5</span></div>
-            </div>
-            
-            <h3>RED SPELLS</h3>
-            <button class="btn-spell" id="spell-red-dash" onclick="game.toggleSpell('dash')">
-                <span>⚡ Dash</span> <span>2m</span>
-            </button>
-            <button class="btn-spell" id="spell-red-freeze" onclick="game.toggleSpell('freeze')">
-                <span>❄️ Freeze</span> <span>3m</span>
-            </button>
-            <button class="btn-spell" id="spell-red-smite" onclick="game.toggleSpell('smite')">
-                <span>🔥 Smite</span> <span>4m</span>
-            </button>
-        </div>
-
-        <!-- BOARD AREA -->
-        <div class="board-area">
-            <div id="turn-display">RED'S TURN</div>
-            <button id="cancel-btn" onclick="game.cancelSpell()">CANCEL SPELL</button>
-            <div id="board"></div>
-            <div id="logs"></div>
-        </div>
-
-        <!-- RIGHT PANEL (BLUE) -->
-        <div class="panel right">
-            <div class="player-card" id="card-blue">
-                <h2>BLUE PALADINS</h2>
-                <div>LVL <span id="lvl-blue">1</span></div>
-                <div class="stat-bar"><div class="fill fill-xp" id="xp-blue" style="width:0%"></div></div>
-                <div class="stat-bar"><div class="fill fill-mana" id="mana-blue" style="width:100%"></div></div>
-                <div>Mana: <span id="mana-text-blue">2/5</span></div>
-            </div>
-
-            <h3>BLUE SPELLS</h3>
-            <button class="btn-spell" id="spell-blue-dash" onclick="game.toggleSpell('dash')">
-                <span>✨ Dash</span> <span>2m</span>
-            </button>
-            <button class="btn-spell" id="spell-blue-freeze" onclick="game.toggleSpell('freeze')">
-                <span>❄️ Freeze</span> <span>3m</span>
-            </button>
-            <button class="btn-spell" id="spell-blue-smite" onclick="game.toggleSpell('smite')">
-                <span>🔨 Smite</span> <span>4m</span>
-            </button>
+        
+        <div class="lobby-box" id="lobby-waiting" style="display: none;">
+            <div class="lobby-title">WAITING...</div>
+            <div style="color: var(--slate-400); margin-bottom: 1rem;">SHARE THIS CODE:</div>
+            <div id="display-room-code" style="font-size: 3rem; font-weight: bold; color: var(--yellow-500); letter-spacing: 5px; margin-bottom: 2rem;"></div>
+            <div class="lobby-status">Waiting for opponent to join...</div>
         </div>
     </div>
 
-    <!-- LOGIC -->
+    <div class="game-container">
+        <!-- RED PANEL -->
+        <div class="player-panel left">
+            <div class="player-header">
+                <div class="avatar red" id="red-avatar">👹</div>
+                <div>
+                    <h2 class="player-name text-red">Red Warlocks</h2>
+                    <div class="player-lvl">Level <span id="red-lvl">1</span></div>
+                </div>
+            </div>
+            <!-- Stats -->
+            <div class="stat-group">
+                <div class="stat-label"><span>XP</span><span id="red-xp-text">0/100</span></div>
+                <div class="progress-bg"><div class="progress-fill fill-xp" id="red-xp-bar" style="width: 0%"></div></div>
+            </div>
+            <div class="stat-group">
+                <div class="stat-label"><span>Mana</span><span id="red-mana-text">2/5</span></div>
+                <div class="progress-bg mana">
+                    <div class="mana-text">+1 / turn</div>
+                    <div class="progress-fill fill-mana" id="red-mana-bar" style="width: 40%"></div>
+                </div>
+            </div>
+            <!-- Spells -->
+            <div class="section-title">Grimoire</div>
+            <div class="spell-grid">
+                <button class="spell-btn" id="btn-red-dash" onclick="game.activateSpell('dash')">
+                    <span class="spell-icon">⚡</span>
+                    <span class="spell-name">Dash</span>
+                    <span class="spell-cost">2 Mana</span>
+                </button>
+                <button class="spell-btn" id="btn-red-freeze" onclick="game.activateSpell('freeze')">
+                    <span class="spell-icon">❄️</span>
+                    <span class="spell-name">Freeze</span>
+                    <span class="spell-cost">3 Mana</span>
+                </button>
+                <button class="spell-btn" id="btn-red-smite" onclick="game.activateSpell('smite')">
+                    <span class="spell-icon">🔥</span>
+                    <span class="spell-name">Smite</span>
+                    <span class="spell-cost">4 Mana</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- CENTER BOARD -->
+        <div class="center-area">
+            <div class="turn-indicator" id="turn-badge">
+                <div class="turn-dot" id="turn-dot"></div>
+                <span id="turn-text">RED'S TURN</span>
+                <span id="cancel-spell" class="cancel-link" style="display: none;" onclick="game.cancelSpell()">Cancel</span>
+            </div>
+
+            <div class="board-container" id="board">
+                <!-- Board generated by JS -->
+            </div>
+
+            <div class="log-container" id="game-log"></div>
+        </div>
+
+        <!-- BLUE PANEL -->
+        <div class="player-panel right">
+            <div class="player-header reverse">
+                <div class="avatar blue" id="blue-avatar">🛡️</div>
+                <div>
+                    <h2 class="player-name text-blue">Blue Paladins</h2>
+                    <div class="player-lvl">Level <span id="blue-lvl">1</span></div>
+                </div>
+            </div>
+            <!-- Stats -->
+            <div class="stat-group">
+                <div class="stat-label"><span>XP</span><span id="blue-xp-text">0/100</span></div>
+                <div class="progress-bg"><div class="progress-fill fill-xp" id="blue-xp-bar" style="width: 0%"></div></div>
+            </div>
+            <div class="stat-group">
+                <div class="stat-label"><span>Mana</span><span id="blue-mana-text">2/5</span></div>
+                <div class="progress-bg mana">
+                    <div class="mana-text">+1 / turn</div>
+                    <div class="progress-fill fill-mana" id="blue-mana-bar" style="width: 40%"></div>
+                </div>
+            </div>
+             <!-- Spells -->
+             <div class="section-title" style="text-align: right;">Divine Powers</div>
+             <div class="spell-grid">
+                 <button class="spell-btn" id="btn-blue-dash" onclick="game.activateSpell('dash')">
+                     <span class="spell-icon">✨</span>
+                     <span class="spell-name">Dash</span>
+                     <span class="spell-cost">2 Mana</span>
+                 </button>
+                 <button class="spell-btn" id="btn-blue-freeze" onclick="game.activateSpell('freeze')">
+                    <span class="spell-icon">❄️</span>
+                    <span class="spell-name">Freeze</span>
+                    <span class="spell-cost">3 Mana</span>
+                </button>
+                 <button class="spell-btn" id="btn-blue-smite" onclick="game.activateSpell('smite')">
+                     <span class="spell-icon">🔨</span>
+                     <span class="spell-name">Smite</span>
+                     <span class="spell-cost">4 Mana</span>
+                 </button>
+             </div>
+        </div>
+    </div>
+
+    <!-- WIN MODAL -->
+    <div class="modal" id="win-modal">
+        <div class="modal-box">
+            <div style="font-size: 5rem; margin-bottom: 1rem;">🏆</div>
+            <h2 id="winner-name" style="font-size: 2.5rem; text-transform: uppercase; margin: 0; line-height: 1;">WINNER!</h2>
+            <div style="color: var(--slate-400); margin-top: 0.5rem;">VICTORY ACHIEVED</div>
+            <button class="modal-btn" onclick="location.reload()">Return to Lobby</button>
+        </div>
+    </div>
+
+    <!-- FIREBASE SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, updateDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+        // --- PASTE YOUR FIREBASE CONFIG HERE ---
         const firebaseConfig = {
             apiKey: "AIzaSyAw_6jPchQudpMb9m7ccOaH3uvx7P1QTXg",
             authDomain: "checkersrpg.firebaseapp.com",
@@ -220,415 +429,518 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        let myId = null;
-        let myRole = null;
-        let roomId = null;
+        let myUserId = null;
+        let myRoomId = null;
+        let myRole = null; // 'red' or 'blue'
 
-        // AUTH
-        signInAnonymously(auth).then(u => {
-            myId = u.user.uid;
-            console.log("Auth Success:", myId);
-        }).catch(e => alert("Auth Failed: " + e.message));
+        // Auth immediately
+        signInAnonymously(auth).then((userCredential) => {
+            myUserId = userCredential.user.uid;
+            console.log("Logged in as", myUserId);
+        }).catch((error) => {
+            document.getElementById('lobby-status').textContent = "Error: Could not connect to Auth";
+            console.error(error);
+        });
 
-        // --- GAME ENGINE ---
-        const Engine = {
-            state: {
-                board: [],
-                turn: 'red',
-                stats: { 
-                    red: { lvl: 1, xp: 0, maxXp: 100, mana: 2, maxMana: 5 }, 
-                    blue: { lvl: 1, xp: 0, maxXp: 100, mana: 2, maxMana: 5 }
-                },
-                selected: null,
-                activeSpell: null,
-                forcedPiece: null,
-                winner: null,
-                logs: []
+        // --- LOBBY LOGIC ---
+        window.lobby = {
+            createGame: async () => {
+                if(!myUserId) return;
+                const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                myRole = 'red';
+                myRoomId = roomId;
+
+                // Initial Game State
+                const gameState = {
+                    board: JSON.stringify(game.createInitialBoard()),
+                    turn: 'red',
+                    stats: game.stats,
+                    players: { red: myUserId, blue: null },
+                    status: 'waiting',
+                    winner: null,
+                    forcedPiece: null,
+                    logs: [{msg: 'Room Created. Waiting for player...', type: 'info'}]
+                };
+
+                await setDoc(doc(db, "games", roomId), gameState);
+                
+                document.getElementById('lobby-main').style.display = 'none';
+                document.getElementById('lobby-waiting').style.display = 'block';
+                document.getElementById('display-room-code').textContent = roomId;
+
+                this.subscribeToGame(roomId);
             },
 
-            initBoard() {
+            joinGame: async () => {
+                if(!myUserId) return;
+                const roomId = document.getElementById('room-code-input').value.toUpperCase();
+                if(roomId.length < 2) return;
+
+                const gameRef = doc(db, "games", roomId);
+                const gameSnap = await getDoc(gameRef);
+
+                if (gameSnap.exists()) {
+                    const data = gameSnap.data();
+                    if(data.players.blue && data.players.blue !== myUserId) {
+                        document.getElementById('lobby-status').textContent = "Room is full!";
+                        return;
+                    }
+
+                    myRole = 'blue';
+                    myRoomId = roomId;
+
+                    // Join logic
+                    await updateDoc(gameRef, {
+                        "players.blue": myUserId,
+                        status: 'playing',
+                        logs: [...data.logs, {msg: 'Blue Player Joined! Game Start.', type: 'info'}]
+                    });
+
+                    this.subscribeToGame(roomId);
+                } else {
+                    document.getElementById('lobby-status').textContent = "Room not found!";
+                }
+            },
+            
+            subscribeToGame: (roomId) => {
+                onSnapshot(doc(db, "games", roomId), (doc) => {
+                    const data = doc.data();
+                    if(!data) return;
+
+                    // Lobby Transition
+                    if(data.status === 'playing') {
+                        document.body.classList.remove('in-lobby');
+                        document.getElementById('lobby-overlay').style.display = 'none';
+                    }
+
+                    // Sync State
+                    game.board = JSON.parse(data.board);
+                    game.turn = data.turn;
+                    game.stats = data.stats;
+                    game.forcedPiece = data.forcedPiece;
+                    game.winner = data.winner;
+                    
+                    // Sync Logs (only new ones ideally, but replacing all works for simple apps)
+                    // We'll just render the last 5 logs for simplicity if we were storing them all, 
+                    // but here we just grab the last one if it's new.
+                    // Simplified: We rely on the log array in DB.
+                    const logContainer = document.getElementById('game-log');
+                    logContainer.innerHTML = '';
+                    if(data.logs) {
+                        data.logs.slice().reverse().forEach(l => game.renderLog(l.msg, l.type));
+                    }
+
+                    if(data.winner) {
+                        game.winGame(data.winner);
+                    }
+
+                    game.render();
+                });
+            }
+        };
+
+        // --- GAME LOGIC ---
+        // Expose game object to window for button onclicks
+        window.game = {
+            board: [],
+            turn: 'red',
+            stats: { red: {}, blue: {} },
+            activeSpell: null,
+            forcedPiece: null,
+            selected: null,
+            
+            // Helper to generate board data without rendering
+            createInitialBoard() {
                 let b = [];
-                for(let r=0; r<8; r++){
-                    let row = [];
-                    for(let c=0; c<8; c++){
-                        let p = null;
+                for(let r=0; r<8; r++) {
+                    const row = [];
+                    for(let c=0; c<8; c++) {
+                        let piece = null;
                         if((r+c)%2 !== 0) {
-                            if(r<3) p = {player:'blue', king:false, frozen:0};
-                            if(r>4) p = {player:'red', king:false, frozen:0};
+                            if(r < 3) piece = { player: 'blue', isKing: false, frozen: 0 };
+                            if(r > 4) piece = { player: 'red', isKing: false, frozen: 0 };
                         }
-                        row.push({piece: p, hl: false, target: false});
+                        row.push({ piece: piece, highlight: false, target: false });
                     }
                     b.push(row);
                 }
                 return b;
             },
 
-            getValidMoves(r, c, piece) {
-                if(piece.frozen > 0) return [];
-                let moves = [];
-                let forward = piece.player === 'red' ? -1 : 1;
-                let dirs = piece.king ? [[-1,-1],[-1,1],[1,-1],[1,1]] : [[forward,-1],[forward,1]];
+            // CORE NETWORK ACTION
+            // We do not mutate state locally anymore. We calculate next state and push to DB.
+            async pushUpdate(newBoard, newStats, nextTurn, newForcedPiece, logMsg, logType) {
+                if(!myRoomId) return;
+                
+                // Get current logs first to append
+                // (In a real app, use arrayUnion, but let's keep it simple)
+                const gameRef = doc(db, "games", myRoomId);
+                const snap = await getDoc(gameRef);
+                const currentLogs = snap.data().logs || [];
+                const newLogs = [...currentLogs, {msg: logMsg, type: logType}];
 
-                dirs.forEach(([dr, dc]) => {
-                    let nr = r+dr, nc = c+dc;
-                    if(this.bounds(nr, nc)) {
-                        // Walk (only if not forced)
-                        if(!this.state.forcedPiece && !this.state.board[nr][nc].piece) {
-                            moves.push({r:nr, c:nc});
-                        }
-                        // Jump
-                        else if(this.state.board[nr][nc].piece && this.state.board[nr][nc].piece.player !== piece.player) {
-                            let jr = nr+dr, jc = nc+dc;
-                            if(this.bounds(jr, jc) && !this.state.board[jr][jc].piece) {
-                                moves.push({r:jr, c:jc});
-                            }
+                await updateDoc(gameRef, {
+                    board: JSON.stringify(newBoard),
+                    stats: newStats,
+                    turn: nextTurn,
+                    forcedPiece: newForcedPiece,
+                    logs: newLogs
+                });
+            },
+
+            // --- INTERACTION ---
+
+            handleClick(r, c) {
+                // RULE: Can only move if it's my turn
+                if(this.turn !== myRole) return;
+                if(window.game.winner) return;
+
+                // Spell Mode
+                if(this.activeSpell) {
+                    this.castSpell(r, c);
+                    return;
+                }
+
+                const cell = this.board[r][c];
+                
+                // 1. Select Piece
+                if(cell.piece && cell.piece.player === this.turn) {
+                    // Check Forced Piece
+                    if (this.forcedPiece) {
+                        if (this.forcedPiece.r !== r || this.forcedPiece.c !== c) {
+                            // Visual feedback only
+                            return; 
                         }
                     }
+
+                    if(cell.piece.frozen > 0) return;
+
+                    this.selected = {r, c};
+                    this.highlightMoves(r, c, cell.piece);
+                    this.render();
+                    return;
+                }
+
+                // 2. Move Piece
+                if(cell.highlight && this.selected) {
+                    this.movePiece(this.selected.r, this.selected.c, r, c);
+                }
+            },
+
+            highlightMoves(r, c, piece) {
+                this.board.forEach(row => row.forEach(cell => cell.highlight = false));
+                const moves = this.getValidMoves(r, c, piece);
+                moves.forEach(m => {
+                    this.board[m.r][m.c].highlight = true;
+                });
+            },
+
+            getValidMoves(r, c, piece) {
+                if (piece.frozen > 0) return [];
+                const moves = [];
+                const forward = piece.player === 'red' ? -1 : 1;
+                const dirs = piece.isKing ? [-1, 1] : [forward];
+
+                dirs.forEach(dr => {
+                    [-1, 1].forEach(dc => {
+                        const nr = r + dr, nc = c + dc;
+                        
+                        if(this.isValid(nr, nc)) {
+                            // Walk
+                            if(!this.forcedPiece && !this.board[nr][nc].piece) {
+                                moves.push({r: nr, c: nc});
+                            }
+                            // Jump
+                            else if(this.board[nr][nc].piece && this.board[nr][nc].piece.player !== piece.player) {
+                                const jr = nr + dr + dr, jc = nc + dc + dc; 
+                                if(this.isValid(jr, jc) && !this.board[jr][jc].piece) {
+                                     moves.push({r: jr, c: jc});
+                                }
+                            }
+                        }
+                    });
                 });
                 return moves;
             },
 
-            bounds(r, c) { return r>=0 && r<8 && c>=0 && c<8; }
-        };
+            async movePiece(fr, fc, tr, tc) {
+                // CLONE STATE to modify
+                let nextBoard = JSON.parse(JSON.stringify(this.board));
+                let nextStats = JSON.parse(JSON.stringify(this.stats));
+                const piece = nextBoard[fr][fc].piece;
+                const isJump = Math.abs(tr - fr) > 1;
+                let logMsg = '';
+                let logType = 'info';
 
-        // --- UI & CONTROLLER ---
-        window.game = {
-            toggleSpell(spell) {
-                if(Engine.state.turn !== myRole) return;
+                // Move
+                nextBoard[tr][tc].piece = piece;
+                nextBoard[fr][fc].piece = null;
+                // clear highlights in data
+                nextBoard.forEach(row => row.forEach(c => c.highlight = false));
+
+                let nextForcedPiece = null;
+                let turnEnds = true;
+
+                // Capture
+                if(isJump) {
+                    const midR = (fr + tr) / 2;
+                    const midC = (fc + tc) / 2;
+                    nextBoard[midR][midC].piece = null;
+                    
+                    logMsg = `${this.turn.toUpperCase()} crushed an enemy!`;
+                    logType = 'combat';
+                    
+                    // XP Logic
+                    nextStats[this.turn].xp += 50;
+                    if(nextStats[this.turn].xp >= nextStats[this.turn].xpNext) {
+                         nextStats[this.turn].level++;
+                         nextStats[this.turn].xp -= nextStats[this.turn].xpNext;
+                         nextStats[this.turn].xpNext = Math.floor(nextStats[this.turn].xpNext * 1.5);
+                         nextStats[this.turn].maxMana += 2;
+                         nextStats[this.turn].mana = nextStats[this.turn].maxMana;
+                         logMsg += " And Leveled Up!";
+                    }
+
+                    // COMBO CHECK
+                    // We need to re-run valid moves on the NEW board state for the piece at new pos
+                    // But `getValidMoves` uses `this.board`. We need a static helper or temp switch.
+                    // For simplicity, we calculate blindly:
+                    const forward = piece.player === 'red' ? -1 : 1;
+                    const dirs = piece.isKing ? [-1, 1] : [forward];
+                    let canJumpAgain = false;
+                    
+                    dirs.forEach(dr => {
+                        [-1, 1].forEach(dc => {
+                            const jr = tr + dr + dr, jc = tc + dc + dc;
+                            const mr = tr + dr, mc = tc + dc;
+                            if(jr>=0 && jr<8 && jc>=0 && jc<8 && !nextBoard[jr][jc].piece) {
+                                if(nextBoard[mr][mc].piece && nextBoard[mr][mc].piece.player !== piece.player) {
+                                    canJumpAgain = true;
+                                }
+                            }
+                        });
+                    });
+
+                    if (canJumpAgain) {
+                        nextForcedPiece = {r: tr, c: tc};
+                        turnEnds = false;
+                        logMsg += " COMBO!";
+                    }
+                }
+
+                // King Me
+                if((piece.player === 'red' && tr === 0) || (piece.player === 'blue' && tr === 7)) {
+                    if(!piece.isKing) {
+                        piece.isKing = true;
+                        logMsg = "Promoted to King!";
+                        logType = 'level';
+                        nextStats[this.turn].xp += 20;
+                        nextForcedPiece = null; 
+                        turnEnds = true;
+                    }
+                }
+
+                // Turn End Logic
+                let nextTurn = this.turn;
+                if (turnEnds) {
+                    nextTurn = this.turn === 'red' ? 'blue' : 'red';
+                    // Mana Regen
+                    if(nextStats[nextTurn].mana < nextStats[nextTurn].maxMana) {
+                        nextStats[nextTurn].mana++;
+                    }
+                    // Tick Frozen
+                    nextBoard.forEach(row => row.forEach(cell => {
+                        if (cell.piece && cell.piece.player === nextTurn && cell.piece.frozen > 0) {
+                            cell.piece.frozen--;
+                        }
+                    }));
+                }
+
+                await this.pushUpdate(nextBoard, nextStats, nextTurn, nextForcedPiece, logMsg || "Moved piece", logType);
+                this.selected = null;
+            },
+
+            activateSpell(spellName) {
+                if(this.turn !== myRole) return;
                 
-                // Toggle off
-                if(Engine.state.activeSpell === spell) {
+                if(this.activeSpell === spellName) {
                     this.cancelSpell();
                     return;
                 }
-
-                Engine.state.activeSpell = spell;
-                this.refreshBoardHighlights();
+                this.activeSpell = spellName;
+                
+                // Highlight targets
+                this.board.forEach((row, r) => row.forEach((cell, c) => {
+                    cell.target = false;
+                    cell.highlight = false; 
+                    
+                    if(spellName === 'smite' || spellName === 'freeze') {
+                        if(cell.piece && cell.piece.player !== this.turn) cell.target = true;
+                    } 
+                    else if(spellName === 'dash') {
+                        if(cell.piece && cell.piece.player === this.turn && cell.piece.frozen === 0) cell.target = true;
+                    }
+                }));
                 this.render();
             },
 
             cancelSpell() {
-                Engine.state.activeSpell = null;
-                this.refreshBoardHighlights();
+                this.activeSpell = null;
+                this.board.forEach(row => row.forEach(cell => cell.target = false));
                 this.render();
             },
 
-            handleClick(r, c) {
-                const s = Engine.state;
-                if(s.winner || s.turn !== myRole) return;
-
-                // 1. Cast Spell
-                if(s.activeSpell) {
-                    this.executeSpell(r, c);
-                    return;
-                }
-
-                const cell = s.board[r][c];
-
-                // 2. Select
-                if(cell.piece && cell.piece.player === s.turn) {
-                    if(s.forcedPiece && (s.forcedPiece.r !== r || s.forcedPiece.c !== c)) return;
-                    if(cell.piece.frozen) return;
-
-                    s.selected = {r, c};
-                    this.refreshBoardHighlights();
-                    this.render();
-                }
-                // 3. Move
-                else if(cell.hl && s.selected) {
-                    this.executeMove(s.selected.r, s.selected.c, r, c);
-                }
-            },
-
-            refreshBoardHighlights() {
-                const s = Engine.state;
-                // Clear all
-                s.board.forEach(row => row.forEach(c => { c.hl = false; c.target = false; }));
-
-                // Spell Targets
-                if(s.activeSpell) {
-                    s.board.forEach((row, r) => row.forEach((cell, c) => {
-                        const p = cell.piece;
-                        if(s.activeSpell === 'smite' || s.activeSpell === 'freeze') {
-                            if(p && p.player !== s.turn) cell.target = true;
-                        } else if (s.activeSpell === 'dash') {
-                            if(p && p.player === s.turn && !p.frozen) cell.target = true;
-                        }
-                    }));
-                    return;
-                }
-
-                // Move Highlights
-                if(s.selected) {
-                    const p = s.board[s.selected.r][s.selected.c].piece;
-                    const moves = Engine.getValidMoves(s.selected.r, s.selected.c, p);
-                    moves.forEach(m => s.board[m.r][m.c].hl = true);
-                }
-            },
-
-            async executeMove(fr, fc, tr, tc) {
-                let s = JSON.parse(JSON.stringify(Engine.state)); // Copy State
-                let p = s.board[fr][fc].piece;
-                let isJump = Math.abs(tr - fr) > 1;
-                let logText = "Moved.";
-
-                // Execute
-                s.board[tr][tc].piece = p;
-                s.board[fr][fc].piece = null;
-                s.selected = null;
-
-                let turnEnd = true;
-                s.forcedPiece = null;
-
-                if(isJump) {
-                    let midR = (fr+tr)/2, midC = (fc+tc)/2;
-                    s.board[midR][midC].piece = null;
-                    logText = "Enemy Crushed!";
-                    
-                    // XP
-                    s.stats[s.turn].xp += 50;
-                    if(s.stats[s.turn].xp >= s.stats[s.turn].maxXp) {
-                        s.stats[s.turn].lvl++;
-                        s.stats[s.turn].xp = 0;
-                        s.stats[s.turn].maxMana += 2;
-                        s.stats[s.turn].mana = s.stats[s.turn].maxMana;
-                        logText = "LEVEL UP!";
-                    }
-
-                    // Combo Logic - Simplified Check
-                    const forward = p.player === 'red' ? -1 : 1;
-                    const dirs = p.king ? [[-1,-1],[-1,1],[1,-1],[1,1]] : [[forward,-1],[forward,1]];
-                    let canJumpAgain = false;
-                    dirs.forEach(([dr, dc]) => {
-                        let jr=tr+dr+dr, jc=tc+dc+dc;
-                        let mr=tr+dr, mc=tc+dc;
-                        if(Engine.bounds(jr,jc) && !s.board[jr][jc].piece && s.board[mr][mc].piece && s.board[mr][mc].piece.player !== p.player) {
-                            canJumpAgain = true;
-                        }
-                    });
-
-                    if(canJumpAgain) {
-                        s.forcedPiece = {r: tr, c: tc};
-                        turnEnd = false;
-                        logText = "COMBO!";
-                    }
-                }
-
-                // King
-                if((p.player==='red' && tr===0) || (p.player==='blue' && tr===7)) {
-                    if(!p.king) { p.king = true; logText="KING!"; turnEnd=true; s.forcedPiece=null; }
-                }
-
-                if(turnEnd) this.nextTurn(s);
-                
-                await this.pushUpdate(s, logText);
-            },
-
-            async executeSpell(r, c) {
-                const cell = Engine.state.board[r][c];
+            async castSpell(r, c) {
+                const cell = this.board[r][c];
                 if(!cell.target) return;
 
-                let s = JSON.parse(JSON.stringify(Engine.state));
-                let spell = s.activeSpell;
-                let cost = spell==='smite'?4 : spell==='freeze'?3 : 2;
-                let p = cell.piece;
-                let log = "";
-
-                // Deduct Mana
-                s.stats[s.turn].mana -= cost;
-
-                if(spell === 'smite') {
-                    s.board[r][c].piece = null;
-                    s.stats[s.turn].xp += 30;
-                    log = "SMITE!";
-                } else if(spell === 'freeze') {
-                    p.frozen = 2; 
-                    log = "FROZEN!";
-                } else if(spell === 'dash') {
-                    // Simple dash forward logic
-                    let dir = s.turn === 'red' ? -1 : 1;
-                    let tr = r + (dir*2);
-                    if(Engine.bounds(tr, c) && !s.board[tr][c].piece) {
-                        s.board[tr][c].piece = p;
-                        s.board[r][c].piece = null;
-                        log = "DASH!";
-                    } else {
-                        s.stats[s.turn].mana += cost; // Refund if fail
-                        this.cancelSpell();
-                        return;
+                let nextBoard = JSON.parse(JSON.stringify(this.board));
+                let nextStats = JSON.parse(JSON.stringify(this.stats));
+                let logMsg = '';
+                
+                if(this.activeSpell === 'smite') {
+                    nextStats[this.turn].mana -= 4;
+                    nextBoard[r][c].piece = null;
+                    logMsg = "SMITE!";
+                    nextStats[this.turn].xp += 30;
+                }
+                else if(this.activeSpell === 'freeze') {
+                    nextStats[this.turn].mana -= 3;
+                    nextBoard[r][c].piece.frozen = 2;
+                    logMsg = "FROZEN!";
+                }
+                else if(this.activeSpell === 'dash') {
+                    nextStats[this.turn].mana -= 2;
+                    const piece = nextBoard[r][c].piece;
+                    const dir = this.turn === 'red' ? -1 : 1;
+                    let tr = r + (dir * 2);
+                    if(tr < 0) tr = 0; if(tr > 7) tr = 7;
+                    
+                    if(this.isValid(tr, c) && !nextBoard[tr][c].piece) {
+                        nextBoard[tr][c].piece = piece;
+                        nextBoard[r][c].piece = null;
+                        logMsg = "DASHED forward!";
+                    } else if (this.isValid(r+dir, c) && !nextBoard[r+dir][c].piece) {
+                        nextBoard[r+dir][c].piece = piece;
+                        nextBoard[r][c].piece = null;
+                        logMsg = "DASHED (short)!";
                     }
                 }
 
-                s.activeSpell = null;
-                this.nextTurn(s);
-                await this.pushUpdate(s, log);
-            },
-
-            nextTurn(s) {
-                let next = s.turn === 'red' ? 'blue' : 'red';
-                // Mana
-                if(s.stats[next].mana < s.stats[next].maxMana) s.stats[next].mana++;
-                // Tick Effects
-                s.board.forEach(row => row.forEach(c => {
-                    if(c.piece && c.piece.player === next && c.piece.frozen > 0) c.piece.frozen--;
+                // Turn End
+                let nextTurn = this.turn === 'red' ? 'blue' : 'red';
+                if(nextStats[nextTurn].mana < nextStats[nextTurn].maxMana) nextStats[nextTurn].mana++;
+                 // Tick Frozen
+                 nextBoard.forEach(row => row.forEach(cell => {
+                    if (cell.piece && cell.piece.player === nextTurn && cell.piece.frozen > 0) {
+                        cell.piece.frozen--;
+                    }
                 }));
-                s.turn = next;
-                
-                // Win Check
-                let redAlive = s.board.some(r=>r.some(c=>c.piece && c.piece.player==='red'));
-                let blueAlive = s.board.some(r=>r.some(c=>c.piece && c.piece.player==='blue'));
-                if(!redAlive) s.winner = 'blue';
-                if(!blueAlive) s.winner = 'red';
+
+                await this.pushUpdate(nextBoard, nextStats, nextTurn, null, logMsg, 'magic');
+                this.activeSpell = null;
             },
 
-            async pushUpdate(newState, logMsg) {
-                // Clear highlights before saving
-                newState.board.forEach(row => row.forEach(c => { c.hl = false; c.target = false; }));
-                
-                if(logMsg) newState.logs.push(`[${myRole.toUpperCase()}] ${logMsg}`);
-                
-                // Optimistic Local Update
-                Engine.state = newState;
-                this.render();
+            isValid(r, c) { return r>=0 && r<8 && c>=0 && c<8; },
 
-                // DB Update
-                await updateDoc(doc(db, "games", roomId), {
-                    board: JSON.stringify(newState.board),
-                    turn: newState.turn,
-                    stats: newState.stats,
-                    forcedPiece: newState.forcedPiece,
-                    winner: newState.winner,
-                    logs: newState.logs
-                });
+            renderLog(msg, type) {
+                const logEl = document.getElementById('game-log');
+                const entry = document.createElement('div');
+                entry.className = `log-entry log-${type}`;
+                entry.textContent = `> ${msg}`;
+                logEl.prepend(entry);
+            },
+
+            winGame(winner) {
+                this.winner = winner;
+                document.getElementById('winner-name').textContent = winner + " WINS!";
+                document.getElementById('winner-name').style.color = winner === 'red' ? 'var(--red-400)' : 'var(--blue-400)';
+                document.getElementById('win-modal').classList.add('active');
+                
+                if(myRoomId) {
+                     updateDoc(doc(db, "games", myRoomId), { winner: winner });
+                }
             },
 
             render() {
-                const s = Engine.state;
-                
                 // 1. Board
-                const bEl = document.getElementById('board');
-                bEl.innerHTML = '';
-                s.board.forEach((row, r) => {
+                const boardEl = document.getElementById('board');
+                boardEl.innerHTML = '';
+                
+                this.board.forEach((row, r) => {
                     row.forEach((cell, c) => {
-                        let div = document.createElement('div');
-                        div.className = `cell ${(r+c)%2!==0 ? 'dark' : 'light'}`;
-                        if(cell.hl) div.classList.add('highlight');
-                        if(cell.target) div.classList.add('target');
-                        div.onclick = () => this.handleClick(r, c);
+                        const cellDiv = document.createElement('div');
+                        cellDiv.className = `cell ${(r+c)%2===0 ? 'light' : 'dark'}`;
+                        if(cell.highlight) cellDiv.classList.add('highlight');
+                        if(cell.target) cellDiv.classList.add('target');
+                        if(this.activeSpell && !cell.target) cellDiv.classList.add('dimmed');
+
+                        cellDiv.onclick = () => this.handleClick(r, c);
 
                         if(cell.piece) {
-                            let p = document.createElement('div');
+                            const p = document.createElement('div');
                             p.className = `piece ${cell.piece.player}`;
-                            if(cell.piece.king) { p.classList.add('king'); p.innerText = '👑'; }
-                            if(cell.piece.frozen) p.classList.add('frozen');
-                            if(s.selected && s.selected.r===r && s.selected.c===c) p.classList.add('selected');
-                            div.appendChild(p);
+                            if(cell.piece.isKing) p.classList.add('king');
+                            if(cell.piece.frozen > 0) p.classList.add('frozen');
+                            if(this.selected && this.selected.r === r && this.selected.c === c) p.classList.add('selected');
+                            
+                            if (cell.piece.isKing) {
+                                p.innerHTML = '👑';
+                            }
+                            cellDiv.appendChild(p);
                         }
-                        bEl.appendChild(div);
+                        boardEl.appendChild(cellDiv);
                     });
                 });
 
-                // 2. Stats
-                ['red', 'blue'].forEach(role => {
-                    let st = s.stats[role];
-                    document.getElementById(`lvl-${role}`).innerText = st.lvl;
-                    document.getElementById(`xp-${role}`).style.width = `${(st.xp/st.maxXp)*100}%`;
-                    document.getElementById(`mana-${role}`).style.width = `${(st.mana/st.maxMana)*100}%`;
-                    document.getElementById(`mana-text-${role}`).innerText = `${st.mana}/${st.maxMana}`;
-                    
-                    // Button states
-                    let isMyTurn = s.turn === myRole && myRole === role;
-                    ['dash', 'freeze', 'smite'].forEach(spell => {
-                        let btn = document.getElementById(`spell-${role}-${spell}`);
-                        if(btn) {
-                            let cost = spell==='smite'?4 : spell==='freeze'?3 : 2;
-                            btn.disabled = !isMyTurn || st.mana < cost;
-                            btn.classList.toggle('active', s.activeSpell === spell);
-                        }
-                    });
-                });
-
-                // 3. UI Status
-                document.getElementById('card-red').classList.toggle('active', s.turn === 'red');
-                document.getElementById('card-blue').classList.toggle('active', s.turn === 'blue');
-                document.getElementById('turn-display').innerText = s.winner ? `${s.winner.toUpperCase()} WINS!` : `${s.turn.toUpperCase()}'S TURN`;
-                
-                document.getElementById('cancel-btn').style.display = s.activeSpell ? 'block' : 'none';
-
-                // 4. Logs
-                let lEl = document.getElementById('logs');
-                lEl.innerHTML = s.logs.slice(-5).reverse().map(l => `<div class="log-line">> ${l}</div>`).join('');
-            }
-        };
-
-        // --- LOBBY CONTROLLER ---
-        window.app = {
-            async createGame() {
-                if(!myId) return alert("Connecting... try again in 1s");
-                let code = Math.floor(1000 + Math.random()*9000).toString();
-                
-                let initialState = Engine.state;
-                initialState.board = Engine.initBoard(); // Clean board
-                
-                await setDoc(doc(db, "games", code), {
-                    board: JSON.stringify(initialState.board),
-                    turn: 'red',
-                    stats: initialState.stats,
-                    players: { red: myId },
-                    winner: null,
-                    logs: ["Room Created"]
-                });
-
-                this.enterLobby(code, 'red');
-            },
-
-            async joinGame() {
-                if(!myId) return alert("Connecting...");
-                let code = document.getElementById('room-code').value;
-                if(code.length !== 4) return alert("Invalid Code");
-
-                let ref = doc(db, "games", code);
-                let snap = await getDoc(ref);
-                
-                if(snap.exists()) {
-                    if(snap.data().players.blue) return alert("Full!");
-                    await updateDoc(ref, { "players.blue": myId });
-                    this.enterLobby(code, 'blue');
-                } else {
-                    alert("Room Not Found");
-                }
-            },
-
-            enterLobby(code, role) {
-                roomId = code;
-                myRole = role;
-                document.getElementById('lobby-main').style.display = 'none'; // hide main lobby
-                
-                // Show Waiting or Game
-                document.getElementById('display-code').innerText = code;
-                
-                onSnapshot(doc(db, "games", code), (snap) => {
-                    let d = snap.data();
-                    if(!d) return;
-
-                    // If both players, start game
-                    if(d.players.red && d.players.blue) {
-                        document.getElementById('lobby').style.display = 'none';
-                        document.getElementById('game').style.display = 'flex';
-                    } else {
-                        document.getElementById('waiting').style.display = 'block';
+                // 2. Stats UI
+                ['red', 'blue'].forEach(p => {
+                    const s = this.stats[p];
+                    if(s) {
+                        document.getElementById(`${p}-lvl`).textContent = s.level;
+                        document.getElementById(`${p}-xp-text`).textContent = `${s.xp}/${s.xpNext}`;
+                        document.getElementById(`${p}-xp-bar`).style.width = `${(s.xp/s.xpNext)*100}%`;
+                        document.getElementById(`${p}-mana-text`).textContent = `${s.mana}/${s.maxMana}`;
+                        document.getElementById(`${p}-mana-bar`).style.width = `${(s.mana/s.maxMana)*100}%`;
                     }
-
-                    // Sync
-                    Engine.state.board = JSON.parse(d.board);
-                    Engine.state.turn = d.turn;
-                    Engine.state.stats = d.stats;
-                    Engine.state.winner = d.winner;
-                    Engine.state.forcedPiece = d.forcedPiece;
-                    Engine.state.logs = d.logs || [];
-                    
-                    window.game.render();
                 });
+
+                // 3. Buttons (Only enabled if it's MY turn and I am that role)
+                const isMyTurn = (this.turn === myRole);
+                const mana = this.stats[myRole]?.mana || 0;
+                
+                document.getElementById('btn-red-dash').disabled = !(isMyTurn && myRole==='red' && mana >= 2);
+                document.getElementById('btn-red-freeze').disabled = !(isMyTurn && myRole==='red' && mana >= 3);
+                document.getElementById('btn-red-smite').disabled = !(isMyTurn && myRole==='red' && mana >= 4);
+
+                document.getElementById('btn-blue-dash').disabled = !(isMyTurn && myRole==='blue' && mana >= 2);
+                document.getElementById('btn-blue-freeze').disabled = !(isMyTurn && myRole==='blue' && mana >= 3);
+                document.getElementById('btn-blue-smite').disabled = !(isMyTurn && myRole==='blue' && mana >= 4);
+
+                // 4. Indicators
+                const dot = document.getElementById('turn-dot');
+                const txt = document.getElementById('turn-text');
+                const cancel = document.getElementById('cancel-spell');
+                const badge = document.getElementById('turn-badge');
+                
+                document.getElementById('red-avatar').classList.toggle('active', this.turn === 'red');
+                document.getElementById('blue-avatar').classList.toggle('active', this.turn === 'blue');
+
+                dot.className = `turn-dot ${this.turn === 'red' ? 'bg-red' : 'bg-blue'}`;
+                
+                if (this.forcedPiece) {
+                    badge.className = 'turn-indicator combo';
+                    txt.textContent = "COMBO! JUMP AGAIN!";
+                    cancel.style.display = 'none';
+                } else if(this.activeSpell) {
+                    badge.className = 'turn-indicator';
+                    txt.textContent = `CASTING: ${this.activeSpell.toUpperCase()}`;
+                    cancel.style.display = 'inline';
+                } else {
+                    badge.className = 'turn-indicator';
+                    txt.textContent = `${this.turn.toUpperCase()}'S TURN`;
+                    cancel.style.display = 'none';
+                }
             }
         };
     </script>
