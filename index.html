@@ -444,7 +444,9 @@
 
         // --- LOBBY LOGIC ---
         window.lobby = {
-            createGame: async () => {
+            // FIXED: Changed from arrow function 'async () =>' to method 'async createGame()'
+            // This allows 'this.subscribeToGame' to work correctly.
+            async createGame() {
                 if(!myUserId) return;
                 const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
                 myRole = 'red';
@@ -471,7 +473,8 @@
                 this.subscribeToGame(roomId);
             },
 
-            joinGame: async () => {
+            // FIXED: Changed from arrow function to method
+            async joinGame() {
                 if(!myUserId) return;
                 const roomId = document.getElementById('room-code-input').value.toUpperCase();
                 if(roomId.length < 2) return;
@@ -496,13 +499,15 @@
                         logs: [...data.logs, {msg: 'Blue Player Joined! Game Start.', type: 'info'}]
                     });
 
+                    // 'this' now correctly refers to window.lobby
                     this.subscribeToGame(roomId);
                 } else {
                     document.getElementById('lobby-status').textContent = "Room not found!";
                 }
             },
             
-            subscribeToGame: (roomId) => {
+            // FIXED: Changed from arrow function to method
+            subscribeToGame(roomId) {
                 onSnapshot(doc(db, "games", roomId), (doc) => {
                     const data = doc.data();
                     if(!data) return;
@@ -520,10 +525,6 @@
                     game.forcedPiece = data.forcedPiece;
                     game.winner = data.winner;
                     
-                    // Sync Logs (only new ones ideally, but replacing all works for simple apps)
-                    // We'll just render the last 5 logs for simplicity if we were storing them all, 
-                    // but here we just grab the last one if it's new.
-                    // Simplified: We rely on the log array in DB.
                     const logContainer = document.getElementById('game-log');
                     logContainer.innerHTML = '';
                     if(data.logs) {
