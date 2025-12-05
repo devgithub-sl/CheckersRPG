@@ -545,7 +545,13 @@
         window.game = {
             board: [],
             turn: 'red',
-            stats: { red: {}, blue: {} },
+            
+            // FIXED: Added default values here instead of empty objects
+            stats: { 
+                red: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 }, 
+                blue: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 } 
+            },
+
             activeSpell: null,
             forcedPiece: null,
             selected: null,
