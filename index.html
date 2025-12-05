@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RPG Checkers</title>
+    <title>RPG Checkers: Multiplayer</title>
     <style>
         /* --- CSS STYLES --- */
         :root {
@@ -17,6 +17,7 @@
             --red-400: #f87171;
             --blue-600: #2563eb;
             --blue-400: #60a5fa;
+            --cyan-500: #06b6d4;
             --amber-100: #fef3c7;
             --stone-800: #292524;
             --yellow-500: #eab308;
@@ -31,6 +32,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            user-select: none;
         }
 
         /* Layout */
@@ -38,6 +40,14 @@
             display: flex;
             flex-direction: column;
             height: 100%;
+            filter: blur(0px);
+            transition: filter 0.3s;
+        }
+        
+        /* Blur background when lobby is open */
+        body.in-lobby .game-container {
+            filter: blur(10px);
+            pointer-events: none;
         }
 
         @media (min-width: 768px) {
@@ -53,6 +63,7 @@
             display: flex;
             flex-direction: column;
             gap: 1rem;
+            overflow-y: auto;
         }
 
         @media (min-width: 768px) {
@@ -74,9 +85,11 @@
             font-size: 1.5rem;
             border: 2px solid;
             box-shadow: 0 0 15px rgba(0,0,0,0.3);
+            transition: transform 0.3s;
         }
-        .avatar.red { background: var(--red-600); border-color: var(--red-400); box-shadow: 0 0 15px rgba(220, 38, 38, 0.5); }
-        .avatar.blue { background: var(--blue-600); border-color: var(--blue-400); box-shadow: 0 0 15px rgba(37, 99, 235, 0.5); }
+        .avatar.active { transform: scale(1.1); box-shadow: 0 0 20px currentColor; }
+        .avatar.red { color: var(--red-400); background: var(--red-600); border-color: var(--red-400); }
+        .avatar.blue { color: var(--blue-400); background: var(--blue-600); border-color: var(--blue-400); }
 
         .player-name { font-size: 1.25rem; font-weight: bold; margin: 0; }
         .player-lvl { font-size: 0.8rem; color: var(--slate-400); }
@@ -99,12 +112,14 @@
         .spell-btn {
             background: var(--slate-800); border: 1px solid var(--slate-700); color: white;
             padding: 0.5rem; border-radius: 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center;
-            transition: all 0.2s;
+            transition: all 0.2s; position: relative; overflow: hidden;
         }
-        .spell-btn:hover:not(:disabled) { background: var(--slate-700); }
-        .spell-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .spell-icon { font-size: 1.25rem; }
-        .spell-name { font-size: 0.75rem; font-weight: bold; margin-top: 2px; }
+        .spell-btn:hover:not(:disabled) { background: var(--slate-700); border-color: var(--slate-400); }
+        .spell-btn:active:not(:disabled) { transform: translateY(1px); }
+        .spell-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
+        
+        .spell-icon { font-size: 1.5rem; margin-bottom: 0.25rem; }
+        .spell-name { font-size: 0.75rem; font-weight: bold; }
         .spell-cost { font-size: 0.65rem; color: var(--slate-400); }
 
         /* Center Board Area */
@@ -125,9 +140,12 @@
             padding: 0.5rem 1.5rem; border-radius: 99px;
             display: flex; align-items: center; gap: 0.5rem;
             font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;
-            z-index: 10;
+            z-index: 20; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: all 0.3s;
         }
-        .turn-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .turn-indicator.combo { border-color: var(--yellow-500); animation: pulse-border 1s infinite; }
+        
+        .turn-dot { width: 10px; height: 10px; border-radius: 50%; transition: background 0.3s; }
         .bg-red { background: var(--red-600); }
         .bg-blue { background: var(--blue-600); }
         .cancel-link { font-size: 0.75rem; color: var(--red-400); text-decoration: underline; cursor: pointer; margin-left: 10px; }
@@ -144,7 +162,9 @@
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
             border-radius: 8px;
             overflow: hidden;
+            transition: transform 0.1s;
         }
+        .board-container.shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 
         .cell {
             position: relative;
@@ -152,63 +172,136 @@
         }
         .cell.light { background: var(--amber-100); }
         .cell.dark { background: var(--stone-800); }
-        .cell.highlight { box-shadow: inset 0 0 0 4px var(--yellow-500); cursor: pointer; }
-        .cell.target { box-shadow: inset 0 0 0 4px #a855f7; cursor: pointer; }
-        .cell.dimmed { opacity: 0.4; }
+        .cell.highlight { cursor: pointer; }
+        /* Dot Overlay for moves */
+        .cell.highlight::after {
+            content: ''; position: absolute; width: 30%; height: 30%;
+            background: rgba(234, 179, 8, 0.6); border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .cell.target { cursor: pointer; box-shadow: inset 0 0 0 4px #a855f7; }
+        .cell.dimmed { filter: brightness(0.4); }
 
         /* Pieces */
         .piece {
             width: 80%; height: 80%; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             box-shadow: 0 4px 6px rgba(0,0,0,0.5);
-            transition: transform 0.2s;
-            font-weight: bold; font-size: 0.8rem; color: rgba(255,255,255,0.7);
+            transition: transform 0.2s, filter 0.3s;
+            font-weight: bold; font-size: 1rem; color: rgba(255,255,255,0.9);
+            position: relative;
+            z-index: 5;
         }
         .piece.red { background: linear-gradient(135deg, #ef4444, #b91c1c); border: 2px solid #7f1d1d; }
         .piece.blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: 2px solid #1e3a8a; }
-        .piece.king { border: 3px solid var(--yellow-500); }
-        .piece.selected { transform: scale(1.15); z-index: 10; border-color: white; }
-
-        .marker-dot { width: 12px; height: 12px; background: rgba(234, 179, 8, 0.5); border-radius: 50%; animation: pulse 1s infinite; }
+        .piece.king { border: 3px solid var(--yellow-500); text-shadow: 0 2px 4px black; }
+        .piece.selected { transform: scale(1.15) translateY(-2px); z-index: 10; border-color: white; }
+        
+        /* Frozen State */
+        .piece.frozen::after {
+            content: '❄️'; font-size: 1.2rem; position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-shadow: 0 0 5px white;
+        }
+        .piece.frozen { filter: brightness(1.2) hue-rotate(180deg) saturate(1.5); border-color: var(--cyan-500); }
 
         /* Log */
         .log-container {
-            width: 100%; max-width: 600px; height: 100px;
+            width: 100%; max-width: 600px; height: 120px;
             background: rgba(0,0,0,0.4); border: 1px solid var(--slate-700);
             border-radius: 4px; margin-top: 1rem; padding: 0.5rem;
             overflow-y: auto; font-family: monospace; font-size: 0.75rem;
         }
-        .log-entry { margin-bottom: 2px; }
-        .log-combat { color: var(--red-400); }
-        .log-level { color: var(--yellow-500); }
-        .log-magic { color: #c084fc; }
+        .log-entry { margin-bottom: 3px; border-left: 2px solid transparent; padding-left: 5px; }
+        .log-combat { color: var(--red-400); border-color: var(--red-400); }
+        .log-level { color: var(--yellow-500); border-color: var(--yellow-500); }
+        .log-magic { color: #c084fc; border-color: #c084fc; }
         .log-info { color: var(--slate-400); }
+
+        /* LOBBY OVERLAY */
+        #lobby-overlay {
+            position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95);
+            z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .lobby-box {
+            background: var(--slate-800); padding: 3rem; border-radius: 1rem;
+            border: 1px solid var(--slate-700); text-align: center;
+            max-width: 400px; width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .lobby-title { font-size: 2rem; font-weight: bold; margin-bottom: 2rem; color: var(--slate-100); }
+        .lobby-btn {
+            width: 100%; padding: 1rem; margin-bottom: 1rem;
+            background: var(--blue-600); border: none; border-radius: 0.5rem;
+            color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer;
+            transition: background 0.2s;
+        }
+        .lobby-btn:hover { background: var(--blue-400); }
+        .lobby-btn.secondary { background: var(--slate-700); }
+        .lobby-btn.secondary:hover { background: var(--slate-600); }
+        
+        .lobby-input {
+            width: 100%; padding: 1rem; margin-bottom: 1rem;
+            background: var(--slate-950); border: 1px solid var(--slate-700);
+            border-radius: 0.5rem; color: white; font-size: 1.2rem; text-align: center;
+            text-transform: uppercase; letter-spacing: 2px;
+            box-sizing: border-box; /* Fix padding issues */
+        }
+        .lobby-status { margin-top: 1rem; color: var(--yellow-500); font-family: monospace; min-height: 1.5em; }
 
         /* Modal */
         .modal {
             position: fixed; inset: 0; background: rgba(0,0,0,0.85);
             display: none; align-items: center; justify-content: center; z-index: 100;
+            backdrop-filter: blur(4px);
         }
         .modal.active { display: flex; }
         .modal-box {
-            background: var(--slate-800); padding: 2rem; border-radius: 1rem;
+            background: var(--slate-800); padding: 2.5rem; border-radius: 1rem;
             border: 2px solid var(--yellow-500); text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .modal-btn {
             background: var(--yellow-500); color: black; font-weight: bold; border: none;
-            padding: 0.75rem 2rem; border-radius: 4px; font-size: 1rem; cursor: pointer; margin-top: 1rem;
+            padding: 0.75rem 2rem; border-radius: 4px; font-size: 1rem; cursor: pointer; margin-top: 1.5rem;
+            transition: transform 0.1s;
         }
+        .modal-btn:hover { transform: scale(1.05); }
 
-        @keyframes pulse { 0% { opacity: 0.5; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0.5; transform: scale(0.9); } }
+        @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.5; } 50% { transform: scale(1.1); opacity: 0.8; } 100% { transform: scale(0.9); opacity: 0.5; } }
+        @keyframes pulse-border { 0% { border-color: var(--yellow-500); } 50% { border-color: transparent; } 100% { border-color: var(--yellow-500); } }
+        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
 </head>
-<body>
+<body class="in-lobby">
+
+    <!-- LOBBY SCREEN -->
+    <div id="lobby-overlay">
+        <div class="lobby-box" id="lobby-main">
+            <div class="lobby-title">RPG CHECKERS</div>
+            <button class="lobby-btn" onclick="lobby.createGame()">CREATE GAME</button>
+            <div style="margin: 1rem 0; color: var(--slate-400); font-size: 0.9rem;">— OR —</div>
+            <input type="text" id="room-code-input" class="lobby-input" placeholder="ENTER ROOM CODE" maxlength="6">
+            <button class="lobby-btn secondary" onclick="lobby.joinGame()">JOIN GAME</button>
+            <div class="lobby-status" id="lobby-status"></div>
+        </div>
+        
+        <div class="lobby-box" id="lobby-waiting" style="display: none;">
+            <div class="lobby-title">WAITING...</div>
+            <div style="color: var(--slate-400); margin-bottom: 1rem;">SHARE THIS CODE:</div>
+            <div id="display-room-code" style="font-size: 3rem; font-weight: bold; color: var(--yellow-500); letter-spacing: 5px; margin-bottom: 2rem;"></div>
+            <div class="lobby-status">Waiting for opponent to join...</div>
+        </div>
+    </div>
 
     <div class="game-container">
         <!-- RED PANEL -->
         <div class="player-panel left">
             <div class="player-header">
-                <div class="avatar red">👹</div>
+                <div class="avatar red" id="red-avatar">👹</div>
                 <div>
                     <h2 class="player-name text-red">Red Warlocks</h2>
                     <div class="player-lvl">Level <span id="red-lvl">1</span></div>
@@ -234,6 +327,11 @@
                     <span class="spell-name">Dash</span>
                     <span class="spell-cost">2 Mana</span>
                 </button>
+                <button class="spell-btn" id="btn-red-freeze" onclick="game.activateSpell('freeze')">
+                    <span class="spell-icon">❄️</span>
+                    <span class="spell-name">Freeze</span>
+                    <span class="spell-cost">3 Mana</span>
+                </button>
                 <button class="spell-btn" id="btn-red-smite" onclick="game.activateSpell('smite')">
                     <span class="spell-icon">🔥</span>
                     <span class="spell-name">Smite</span>
@@ -244,7 +342,7 @@
 
         <!-- CENTER BOARD -->
         <div class="center-area">
-            <div class="turn-indicator">
+            <div class="turn-indicator" id="turn-badge">
                 <div class="turn-dot" id="turn-dot"></div>
                 <span id="turn-text">RED'S TURN</span>
                 <span id="cancel-spell" class="cancel-link" style="display: none;" onclick="game.cancelSpell()">Cancel</span>
@@ -260,7 +358,7 @@
         <!-- BLUE PANEL -->
         <div class="player-panel right">
             <div class="player-header reverse">
-                <div class="avatar blue">🛡️</div>
+                <div class="avatar blue" id="blue-avatar">🛡️</div>
                 <div>
                     <h2 class="player-name text-blue">Blue Paladins</h2>
                     <div class="player-lvl">Level <span id="blue-lvl">1</span></div>
@@ -286,6 +384,11 @@
                      <span class="spell-name">Dash</span>
                      <span class="spell-cost">2 Mana</span>
                  </button>
+                 <button class="spell-btn" id="btn-blue-freeze" onclick="game.activateSpell('freeze')">
+                    <span class="spell-icon">❄️</span>
+                    <span class="spell-name">Freeze</span>
+                    <span class="spell-cost">3 Mana</span>
+                </button>
                  <button class="spell-btn" id="btn-blue-smite" onclick="game.activateSpell('smite')">
                      <span class="spell-icon">🔨</span>
                      <span class="spell-name">Smite</span>
@@ -298,68 +401,201 @@
     <!-- WIN MODAL -->
     <div class="modal" id="win-modal">
         <div class="modal-box">
-            <div style="font-size: 4rem;">🏆</div>
-            <h2 id="winner-name" style="font-size: 2rem; text-transform: uppercase; margin: 10px 0;">WINNER!</h2>
-            <button class="modal-btn" onclick="game.reset()">New Game</button>
+            <div style="font-size: 5rem; margin-bottom: 1rem;">🏆</div>
+            <h2 id="winner-name" style="font-size: 2.5rem; text-transform: uppercase; margin: 0; line-height: 1;">WINNER!</h2>
+            <div style="color: var(--slate-400); margin-top: 0.5rem;">VICTORY ACHIEVED</div>
+            <button class="modal-btn" onclick="location.reload()">Return to Lobby</button>
         </div>
     </div>
 
-    <!-- JAVASCRIPT LOGIC -->
-    <script>
-        const game = {
+    <!-- FIREBASE SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // --- PASTE YOUR FIREBASE CONFIG HERE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAw_6jPchQudpMb9m7ccOaH3uvx7P1QTXg",
+            authDomain: "checkersrpg.firebaseapp.com",
+            projectId: "checkersrpg",
+            storageBucket: "checkersrpg.firebasestorage.app",
+            messagingSenderId: "527317445442",
+            appId: "1:527317445442:web:9c59dc55089c479ff076db",
+            measurementId: "G-L7H2D9YXJT"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let myUserId = null;
+        let myRoomId = null;
+        let myRole = null; // 'red' or 'blue'
+
+        // Auth immediately
+        signInAnonymously(auth).then((userCredential) => {
+            myUserId = userCredential.user.uid;
+            console.log("Logged in as", myUserId);
+        }).catch((error) => {
+            document.getElementById('lobby-status').textContent = "Error: Could not connect to Auth";
+            console.error(error);
+        });
+
+        // --- LOBBY LOGIC ---
+        window.lobby = {
+            createGame: async () => {
+                if(!myUserId) return;
+                const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                myRole = 'red';
+                myRoomId = roomId;
+
+                // Initial Game State
+                const gameState = {
+                    board: JSON.stringify(game.createInitialBoard()),
+                    turn: 'red',
+                    stats: game.stats,
+                    players: { red: myUserId, blue: null },
+                    status: 'waiting',
+                    winner: null,
+                    forcedPiece: null,
+                    logs: [{msg: 'Room Created. Waiting for player...', type: 'info'}]
+                };
+
+                await setDoc(doc(db, "games", roomId), gameState);
+                
+                document.getElementById('lobby-main').style.display = 'none';
+                document.getElementById('lobby-waiting').style.display = 'block';
+                document.getElementById('display-room-code').textContent = roomId;
+
+                this.subscribeToGame(roomId);
+            },
+
+            joinGame: async () => {
+                if(!myUserId) return;
+                const roomId = document.getElementById('room-code-input').value.toUpperCase();
+                if(roomId.length < 2) return;
+
+                const gameRef = doc(db, "games", roomId);
+                const gameSnap = await getDoc(gameRef);
+
+                if (gameSnap.exists()) {
+                    const data = gameSnap.data();
+                    if(data.players.blue && data.players.blue !== myUserId) {
+                        document.getElementById('lobby-status').textContent = "Room is full!";
+                        return;
+                    }
+
+                    myRole = 'blue';
+                    myRoomId = roomId;
+
+                    // Join logic
+                    await updateDoc(gameRef, {
+                        "players.blue": myUserId,
+                        status: 'playing',
+                        logs: [...data.logs, {msg: 'Blue Player Joined! Game Start.', type: 'info'}]
+                    });
+
+                    this.subscribeToGame(roomId);
+                } else {
+                    document.getElementById('lobby-status').textContent = "Room not found!";
+                }
+            },
+            
+            subscribeToGame: (roomId) => {
+                onSnapshot(doc(db, "games", roomId), (doc) => {
+                    const data = doc.data();
+                    if(!data) return;
+
+                    // Lobby Transition
+                    if(data.status === 'playing') {
+                        document.body.classList.remove('in-lobby');
+                        document.getElementById('lobby-overlay').style.display = 'none';
+                    }
+
+                    // Sync State
+                    game.board = JSON.parse(data.board);
+                    game.turn = data.turn;
+                    game.stats = data.stats;
+                    game.forcedPiece = data.forcedPiece;
+                    game.winner = data.winner;
+                    
+                    // Sync Logs (only new ones ideally, but replacing all works for simple apps)
+                    // We'll just render the last 5 logs for simplicity if we were storing them all, 
+                    // but here we just grab the last one if it's new.
+                    // Simplified: We rely on the log array in DB.
+                    const logContainer = document.getElementById('game-log');
+                    logContainer.innerHTML = '';
+                    if(data.logs) {
+                        data.logs.slice().reverse().forEach(l => game.renderLog(l.msg, l.type));
+                    }
+
+                    if(data.winner) {
+                        game.winGame(data.winner);
+                    }
+
+                    game.render();
+                });
+            }
+        };
+
+        // --- GAME LOGIC ---
+        // Expose game object to window for button onclicks
+        window.game = {
             board: [],
             turn: 'red',
-            selected: null, // {r, c}
-            activeSpell: null, // 'dash' | 'smite'
-            winner: null,
-            stats: {
-                red: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 },
-                blue: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 }
-            },
-
-            init() {
-                this.resetStats();
-                this.createBoard();
-                this.turn = 'red';
-                this.activeSpell = null;
-                this.winner = null;
-                this.log('Game Started! Red moves first.', 'info');
-                this.render();
-            },
-
-            reset() {
-                document.getElementById('win-modal').classList.remove('active');
-                this.init();
-            },
-
-            resetStats() {
-                this.stats = {
-                    red: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 },
-                    blue: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 }
-                };
-            },
-
-            createBoard() {
-                this.board = [];
+            stats: { red: {}, blue: {} },
+            activeSpell: null,
+            forcedPiece: null,
+            selected: null,
+            
+            // Helper to generate board data without rendering
+            createInitialBoard() {
+                let b = [];
                 for(let r=0; r<8; r++) {
                     const row = [];
                     for(let c=0; c<8; c++) {
                         let piece = null;
                         if((r+c)%2 !== 0) {
-                            if(r < 3) piece = { player: 'blue', isKing: false };
-                            if(r > 4) piece = { player: 'red', isKing: false };
+                            if(r < 3) piece = { player: 'blue', isKing: false, frozen: 0 };
+                            if(r > 4) piece = { player: 'red', isKing: false, frozen: 0 };
                         }
                         row.push({ piece: piece, highlight: false, target: false });
                     }
-                    this.board.push(row);
+                    b.push(row);
                 }
+                return b;
+            },
+
+            // CORE NETWORK ACTION
+            // We do not mutate state locally anymore. We calculate next state and push to DB.
+            async pushUpdate(newBoard, newStats, nextTurn, newForcedPiece, logMsg, logType) {
+                if(!myRoomId) return;
+                
+                // Get current logs first to append
+                // (In a real app, use arrayUnion, but let's keep it simple)
+                const gameRef = doc(db, "games", myRoomId);
+                const snap = await getDoc(gameRef);
+                const currentLogs = snap.data().logs || [];
+                const newLogs = [...currentLogs, {msg: logMsg, type: logType}];
+
+                await updateDoc(gameRef, {
+                    board: JSON.stringify(newBoard),
+                    stats: newStats,
+                    turn: nextTurn,
+                    forcedPiece: newForcedPiece,
+                    logs: newLogs
+                });
             },
 
             // --- INTERACTION ---
 
             handleClick(r, c) {
-                if(this.winner) return;
+                // RULE: Can only move if it's my turn
+                if(this.turn !== myRole) return;
+                if(window.game.winner) return;
 
+                // Spell Mode
                 if(this.activeSpell) {
                     this.castSpell(r, c);
                     return;
@@ -369,6 +605,16 @@
                 
                 // 1. Select Piece
                 if(cell.piece && cell.piece.player === this.turn) {
+                    // Check Forced Piece
+                    if (this.forcedPiece) {
+                        if (this.forcedPiece.r !== r || this.forcedPiece.c !== c) {
+                            // Visual feedback only
+                            return; 
+                        }
+                    }
+
+                    if(cell.piece.frozen > 0) return;
+
                     this.selected = {r, c};
                     this.highlightMoves(r, c, cell.piece);
                     this.render();
@@ -382,9 +628,7 @@
             },
 
             highlightMoves(r, c, piece) {
-                // Reset highlights
                 this.board.forEach(row => row.forEach(cell => cell.highlight = false));
-
                 const moves = this.getValidMoves(r, c, piece);
                 moves.forEach(m => {
                     this.board[m.r][m.c].highlight = true;
@@ -392,6 +636,7 @@
             },
 
             getValidMoves(r, c, piece) {
+                if (piece.frozen > 0) return [];
                 const moves = [];
                 const forward = piece.player === 'red' ? -1 : 1;
                 const dirs = piece.isKing ? [-1, 1] : [forward];
@@ -402,14 +647,14 @@
                         
                         if(this.isValid(nr, nc)) {
                             // Walk
-                            if(!this.board[nr][nc].piece) {
+                            if(!this.forcedPiece && !this.board[nr][nc].piece) {
                                 moves.push({r: nr, c: nc});
                             }
                             // Jump
-                            else if(this.board[nr][nc].piece.player !== piece.player) {
-                                const jr = nr + dr, jc = nc + dc;
+                            else if(this.board[nr][nc].piece && this.board[nr][nc].piece.player !== piece.player) {
+                                const jr = nr + dr + dr, jc = nc + dc + dc; 
                                 if(this.isValid(jr, jc) && !this.board[jr][jc].piece) {
-                                    moves.push({r: jr, c: jc});
+                                     moves.push({r: jr, c: jc});
                                 }
                             }
                         }
@@ -418,40 +663,106 @@
                 return moves;
             },
 
-            movePiece(fr, fc, tr, tc) {
-                const piece = this.board[fr][fc].piece;
+            async movePiece(fr, fc, tr, tc) {
+                // CLONE STATE to modify
+                let nextBoard = JSON.parse(JSON.stringify(this.board));
+                let nextStats = JSON.parse(JSON.stringify(this.stats));
+                const piece = nextBoard[fr][fc].piece;
                 const isJump = Math.abs(tr - fr) > 1;
+                let logMsg = '';
+                let logType = 'info';
 
                 // Move
-                this.board[tr][tc].piece = piece;
-                this.board[fr][fc].piece = null;
-                this.selected = null;
-                this.board.forEach(row => row.forEach(c => c.highlight = false));
+                nextBoard[tr][tc].piece = piece;
+                nextBoard[fr][fc].piece = null;
+                // clear highlights in data
+                nextBoard.forEach(row => row.forEach(c => c.highlight = false));
+
+                let nextForcedPiece = null;
+                let turnEnds = true;
 
                 // Capture
                 if(isJump) {
                     const midR = (fr + tr) / 2;
                     const midC = (fc + tc) / 2;
-                    this.board[midR][midC].piece = null;
-                    this.log(`${this.turn.toUpperCase()} crushed an enemy!`, 'combat');
-                    this.gainXp(this.turn, 50);
+                    nextBoard[midR][midC].piece = null;
+                    
+                    logMsg = `${this.turn.toUpperCase()} crushed an enemy!`;
+                    logType = 'combat';
+                    
+                    // XP Logic
+                    nextStats[this.turn].xp += 50;
+                    if(nextStats[this.turn].xp >= nextStats[this.turn].xpNext) {
+                         nextStats[this.turn].level++;
+                         nextStats[this.turn].xp -= nextStats[this.turn].xpNext;
+                         nextStats[this.turn].xpNext = Math.floor(nextStats[this.turn].xpNext * 1.5);
+                         nextStats[this.turn].maxMana += 2;
+                         nextStats[this.turn].mana = nextStats[this.turn].maxMana;
+                         logMsg += " And Leveled Up!";
+                    }
+
+                    // COMBO CHECK
+                    // We need to re-run valid moves on the NEW board state for the piece at new pos
+                    // But `getValidMoves` uses `this.board`. We need a static helper or temp switch.
+                    // For simplicity, we calculate blindly:
+                    const forward = piece.player === 'red' ? -1 : 1;
+                    const dirs = piece.isKing ? [-1, 1] : [forward];
+                    let canJumpAgain = false;
+                    
+                    dirs.forEach(dr => {
+                        [-1, 1].forEach(dc => {
+                            const jr = tr + dr + dr, jc = tc + dc + dc;
+                            const mr = tr + dr, mc = tc + dc;
+                            if(jr>=0 && jr<8 && jc>=0 && jc<8 && !nextBoard[jr][jc].piece) {
+                                if(nextBoard[mr][mc].piece && nextBoard[mr][mc].piece.player !== piece.player) {
+                                    canJumpAgain = true;
+                                }
+                            }
+                        });
+                    });
+
+                    if (canJumpAgain) {
+                        nextForcedPiece = {r: tr, c: tc};
+                        turnEnds = false;
+                        logMsg += " COMBO!";
+                    }
                 }
 
                 // King Me
                 if((piece.player === 'red' && tr === 0) || (piece.player === 'blue' && tr === 7)) {
                     if(!piece.isKing) {
                         piece.isKing = true;
-                        this.log(`${this.turn.toUpperCase()} Promoted to King!`, 'level');
-                        this.gainXp(this.turn, 20);
+                        logMsg = "Promoted to King!";
+                        logType = 'level';
+                        nextStats[this.turn].xp += 20;
+                        nextForcedPiece = null; 
+                        turnEnds = true;
                     }
                 }
 
-                this.endTurn();
+                // Turn End Logic
+                let nextTurn = this.turn;
+                if (turnEnds) {
+                    nextTurn = this.turn === 'red' ? 'blue' : 'red';
+                    // Mana Regen
+                    if(nextStats[nextTurn].mana < nextStats[nextTurn].maxMana) {
+                        nextStats[nextTurn].mana++;
+                    }
+                    // Tick Frozen
+                    nextBoard.forEach(row => row.forEach(cell => {
+                        if (cell.piece && cell.piece.player === nextTurn && cell.piece.frozen > 0) {
+                            cell.piece.frozen--;
+                        }
+                    }));
+                }
+
+                await this.pushUpdate(nextBoard, nextStats, nextTurn, nextForcedPiece, logMsg || "Moved piece", logType);
+                this.selected = null;
             },
 
-            // --- SPELLS ---
-
             activateSpell(spellName) {
+                if(this.turn !== myRole) return;
+                
                 if(this.activeSpell === spellName) {
                     this.cancelSpell();
                     return;
@@ -461,19 +772,15 @@
                 // Highlight targets
                 this.board.forEach((row, r) => row.forEach((cell, c) => {
                     cell.target = false;
-                    cell.highlight = false; // clear move highlights
+                    cell.highlight = false; 
                     
-                    if(spellName === 'smite') {
-                        // Target Enemy
+                    if(spellName === 'smite' || spellName === 'freeze') {
                         if(cell.piece && cell.piece.player !== this.turn) cell.target = true;
                     } 
                     else if(spellName === 'dash') {
-                        // Target Own
-                        if(cell.piece && cell.piece.player === this.turn) cell.target = true;
+                        if(cell.piece && cell.piece.player === this.turn && cell.piece.frozen === 0) cell.target = true;
                     }
                 }));
-                
-                this.log(`Casting ${spellName.toUpperCase()}... Select target.`, 'magic');
                 this.render();
             },
 
@@ -483,94 +790,60 @@
                 this.render();
             },
 
-            castSpell(r, c) {
+            async castSpell(r, c) {
                 const cell = this.board[r][c];
                 if(!cell.target) return;
 
-                const player = this.turn;
-                const stats = this.stats[player];
-
+                let nextBoard = JSON.parse(JSON.stringify(this.board));
+                let nextStats = JSON.parse(JSON.stringify(this.stats));
+                let logMsg = '';
+                
                 if(this.activeSpell === 'smite') {
-                    stats.mana -= 4;
-                    cell.piece = null;
-                    this.log(`${player.toUpperCase()} Smited an enemy!`, 'magic');
-                    this.gainXp(player, 30);
-                    this.cancelSpell();
-                    this.endTurn();
+                    nextStats[this.turn].mana -= 4;
+                    nextBoard[r][c].piece = null;
+                    logMsg = "SMITE!";
+                    nextStats[this.turn].xp += 30;
+                }
+                else if(this.activeSpell === 'freeze') {
+                    nextStats[this.turn].mana -= 3;
+                    nextBoard[r][c].piece.frozen = 2;
+                    logMsg = "FROZEN!";
                 }
                 else if(this.activeSpell === 'dash') {
-                    stats.mana -= 2;
-                    // Move piece 2 squares forward if possible
-                    const piece = cell.piece;
-                    const dir = player === 'red' ? -1 : 1;
+                    nextStats[this.turn].mana -= 2;
+                    const piece = nextBoard[r][c].piece;
+                    const dir = this.turn === 'red' ? -1 : 1;
                     let tr = r + (dir * 2);
-                    // Clamp
                     if(tr < 0) tr = 0; if(tr > 7) tr = 7;
                     
-                    // Simple logic: if blocked, try 1 square, if blocked stay
-                    if(this.isValid(tr, c) && !this.board[tr][c].piece) {
-                        this.board[tr][c].piece = piece;
-                        this.board[r][c].piece = null;
-                        this.log('DASH successful!', 'magic');
-                    } else if (this.isValid(r+dir, c) && !this.board[r+dir][c].piece) {
-                        this.board[r+dir][c].piece = piece;
-                        this.board[r][c].piece = null;
-                        this.log('DASH successful (short)!', 'magic');
-                    } else {
-                        this.log('DASH fizzled (blocked)!', 'magic');
+                    if(this.isValid(tr, c) && !nextBoard[tr][c].piece) {
+                        nextBoard[tr][c].piece = piece;
+                        nextBoard[r][c].piece = null;
+                        logMsg = "DASHED forward!";
+                    } else if (this.isValid(r+dir, c) && !nextBoard[r+dir][c].piece) {
+                        nextBoard[r+dir][c].piece = piece;
+                        nextBoard[r][c].piece = null;
+                        logMsg = "DASHED (short)!";
                     }
-                    this.cancelSpell();
-                    this.endTurn();
-                }
-            },
-
-            // --- RPG LOGIC ---
-
-            gainXp(player, amount) {
-                const s = this.stats[player];
-                s.xp += amount;
-                if(s.xp >= s.xpNext) {
-                    s.level++;
-                    s.xp -= s.xpNext;
-                    s.xpNext = Math.floor(s.xpNext * 1.5);
-                    s.maxMana += 2;
-                    s.mana = s.maxMana;
-                    this.log(`${player.toUpperCase()} Leveled Up to ${s.level}!`, 'level');
-                }
-            },
-
-            endTurn() {
-                this.checkWin();
-                if(this.winner) return;
-
-                // Mana Regen for NEXT player
-                const next = this.turn === 'red' ? 'blue' : 'red';
-                if(this.stats[next].mana < this.stats[next].maxMana) {
-                    this.stats[next].mana++;
                 }
 
-                this.turn = next;
-                this.render();
-            },
+                // Turn End
+                let nextTurn = this.turn === 'red' ? 'blue' : 'red';
+                if(nextStats[nextTurn].mana < nextStats[nextTurn].maxMana) nextStats[nextTurn].mana++;
+                 // Tick Frozen
+                 nextBoard.forEach(row => row.forEach(cell => {
+                    if (cell.piece && cell.piece.player === nextTurn && cell.piece.frozen > 0) {
+                        cell.piece.frozen--;
+                    }
+                }));
 
-            checkWin() {
-                const redAlive = this.board.some(row => row.some(c => c.piece?.player === 'red'));
-                const blueAlive = this.board.some(row => row.some(c => c.piece?.player === 'blue'));
-                
-                if(!redAlive) this.winGame('blue');
-                if(!blueAlive) this.winGame('red');
-            },
-
-            winGame(winner) {
-                this.winner = winner;
-                document.getElementById('winner-name').textContent = winner + " WINS!";
-                document.getElementById('winner-name').style.color = winner === 'red' ? 'var(--red-400)' : 'var(--blue-400)';
-                document.getElementById('win-modal').classList.add('active');
+                await this.pushUpdate(nextBoard, nextStats, nextTurn, null, logMsg, 'magic');
+                this.activeSpell = null;
             },
 
             isValid(r, c) { return r>=0 && r<8 && c>=0 && c<8; },
 
-            log(msg, type) {
+            renderLog(msg, type) {
                 const logEl = document.getElementById('game-log');
                 const entry = document.createElement('div');
                 entry.className = `log-entry log-${type}`;
@@ -578,7 +851,16 @@
                 logEl.prepend(entry);
             },
 
-            // --- RENDERING ---
+            winGame(winner) {
+                this.winner = winner;
+                document.getElementById('winner-name').textContent = winner + " WINS!";
+                document.getElementById('winner-name').style.color = winner === 'red' ? 'var(--red-400)' : 'var(--blue-400)';
+                document.getElementById('win-modal').classList.add('active');
+                
+                if(myRoomId) {
+                     updateDoc(doc(db, "games", myRoomId), { winner: winner });
+                }
+            },
 
             render() {
                 // 1. Board
@@ -591,8 +873,6 @@
                         cellDiv.className = `cell ${(r+c)%2===0 ? 'light' : 'dark'}`;
                         if(cell.highlight) cellDiv.classList.add('highlight');
                         if(cell.target) cellDiv.classList.add('target');
-                        
-                        // Dimming logic if spelling
                         if(this.activeSpell && !cell.target) cellDiv.classList.add('dimmed');
 
                         cellDiv.onclick = () => this.handleClick(r, c);
@@ -601,63 +881,68 @@
                             const p = document.createElement('div');
                             p.className = `piece ${cell.piece.player}`;
                             if(cell.piece.isKing) p.classList.add('king');
+                            if(cell.piece.frozen > 0) p.classList.add('frozen');
                             if(this.selected && this.selected.r === r && this.selected.c === c) p.classList.add('selected');
                             
-                            p.innerHTML = cell.piece.isKing ? '👑' : (cell.piece.player === 'red' ? 'W' : 'P');
+                            if (cell.piece.isKing) {
+                                p.innerHTML = '👑';
+                            }
                             cellDiv.appendChild(p);
-                        } else if (cell.highlight) {
-                            const dot = document.createElement('div');
-                            dot.className = 'marker-dot';
-                            cellDiv.appendChild(dot);
                         }
-
                         boardEl.appendChild(cellDiv);
                     });
                 });
 
                 // 2. Stats UI
-                this.updateStatUI('red');
-                this.updateStatUI('blue');
+                ['red', 'blue'].forEach(p => {
+                    const s = this.stats[p];
+                    if(s) {
+                        document.getElementById(`${p}-lvl`).textContent = s.level;
+                        document.getElementById(`${p}-xp-text`).textContent = `${s.xp}/${s.xpNext}`;
+                        document.getElementById(`${p}-xp-bar`).style.width = `${(s.xp/s.xpNext)*100}%`;
+                        document.getElementById(`${p}-mana-text`).textContent = `${s.mana}/${s.maxMana}`;
+                        document.getElementById(`${p}-mana-bar`).style.width = `${(s.mana/s.maxMana)*100}%`;
+                    }
+                });
 
-                // 3. Buttons State
-                const currentMana = this.stats[this.turn].mana;
-                const isRed = this.turn === 'red';
-                const isBlue = this.turn === 'blue';
+                // 3. Buttons (Only enabled if it's MY turn and I am that role)
+                const isMyTurn = (this.turn === myRole);
+                const mana = this.stats[myRole]?.mana || 0;
+                
+                document.getElementById('btn-red-dash').disabled = !(isMyTurn && myRole==='red' && mana >= 2);
+                document.getElementById('btn-red-freeze').disabled = !(isMyTurn && myRole==='red' && mana >= 3);
+                document.getElementById('btn-red-smite').disabled = !(isMyTurn && myRole==='red' && mana >= 4);
 
-                document.getElementById('btn-red-dash').disabled = !isRed || currentMana < 2;
-                document.getElementById('btn-red-smite').disabled = !isRed || currentMana < 4;
-                document.getElementById('btn-blue-dash').disabled = !isBlue || currentMana < 2;
-                document.getElementById('btn-blue-smite').disabled = !isBlue || currentMana < 4;
+                document.getElementById('btn-blue-dash').disabled = !(isMyTurn && myRole==='blue' && mana >= 2);
+                document.getElementById('btn-blue-freeze').disabled = !(isMyTurn && myRole==='blue' && mana >= 3);
+                document.getElementById('btn-blue-smite').disabled = !(isMyTurn && myRole==='blue' && mana >= 4);
 
-                // 4. Turn Indicator
+                // 4. Indicators
                 const dot = document.getElementById('turn-dot');
                 const txt = document.getElementById('turn-text');
                 const cancel = document.getElementById('cancel-spell');
-
-                dot.className = `turn-dot ${isRed ? 'bg-red' : 'bg-blue'}`;
+                const badge = document.getElementById('turn-badge');
                 
-                if(this.activeSpell) {
+                document.getElementById('red-avatar').classList.toggle('active', this.turn === 'red');
+                document.getElementById('blue-avatar').classList.toggle('active', this.turn === 'blue');
+
+                dot.className = `turn-dot ${this.turn === 'red' ? 'bg-red' : 'bg-blue'}`;
+                
+                if (this.forcedPiece) {
+                    badge.className = 'turn-indicator combo';
+                    txt.textContent = "COMBO! JUMP AGAIN!";
+                    cancel.style.display = 'none';
+                } else if(this.activeSpell) {
+                    badge.className = 'turn-indicator';
                     txt.textContent = `CASTING: ${this.activeSpell.toUpperCase()}`;
                     cancel.style.display = 'inline';
                 } else {
+                    badge.className = 'turn-indicator';
                     txt.textContent = `${this.turn.toUpperCase()}'S TURN`;
                     cancel.style.display = 'none';
                 }
-            },
-
-            updateStatUI(player) {
-                const s = this.stats[player];
-                document.getElementById(`${player}-lvl`).textContent = s.level;
-                document.getElementById(`${player}-xp-text`).textContent = `${s.xp}/${s.xpNext}`;
-                document.getElementById(`${player}-xp-bar`).style.width = `${(s.xp/s.xpNext)*100}%`;
-                document.getElementById(`${player}-mana-text`).textContent = `${s.mana}/${s.maxMana}`;
-                document.getElementById(`${player}-mana-bar`).style.width = `${(s.mana/s.maxMana)*100}%`;
             }
         };
-
-        // Start
-        game.init();
-
     </script>
 </body>
 </html>
