@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RPG Checkers: Multiplayer</title>
+    <title>RPG Checkers: Multiplayer Fixed</title>
     <style>
         /* --- CSS STYLES --- */
         :root {
@@ -61,7 +61,8 @@
         .progress-fill { height: 100%; transition: width 0.3s ease; }
         .fill-xp { background: var(--yellow-500); }
         .fill-mana { background: linear-gradient(90deg, var(--blue-600), var(--blue-400)); }
-        
+        .mana-text { position: absolute; width: 100%; text-align: center; font-size: 8px; line-height: 12px; font-weight: bold; text-shadow: 0 1px 2px black; top: 0; color: white; }
+
         .spell-scroll { display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.25rem 0; scrollbar-width: none; }
         .spell-scroll::-webkit-scrollbar { display: none; }
         .spell-btn { background: var(--slate-800); border: 1px solid var(--slate-700); color: white; padding: 0.4rem; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; min-width: 60px; height: 60px; flex-shrink: 0; transition: all 0.2s; }
@@ -84,6 +85,7 @@
 
         .cell { position: relative; display: flex; align-items: center; justify-content: center; }
         .cell.light { background: var(--amber-100); } .cell.dark { background: var(--stone-800); }
+        .cell.highlight { cursor: pointer; }
         .cell.highlight::after { content: ''; position: absolute; width: 25%; height: 25%; background: rgba(234, 179, 8, 0.8); border-radius: 50%; animation: pulse 1.5s infinite; }
         .cell.target { box-shadow: inset 0 0 0 3px #a855f7; cursor: pointer; }
         .cell.dimmed { filter: brightness(0.4); }
@@ -290,14 +292,14 @@
                 const gameState = {
                     board: JSON.stringify(game.createInitialBoard()),
                     turn: 'red',
-                    // FIX: Ensure stats are initialized in DB correctly
+                    // FIX: Stats are now correctly initialized in the DB
                     stats: { 
                         red: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 }, 
                         blue: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 } 
                     },
                     players: { red: myUserId, blue: null },
                     status: 'waiting',
-                    winner: null,
+                    winner: null, // Ensure winner is null
                     forcedPiece: null,
                     logs: [{msg: 'Room Created. Waiting for player...', type: 'info'}]
                 };
@@ -329,11 +331,10 @@
                     myRole = 'blue';
                     myRoomId = roomId;
 
-                    // FIX: Safer log update
+                    // Safe log append
                     const currentLogs = data.logs || [];
                     const newLogs = [...currentLogs, {msg: 'Blue Player Joined! Game Start.', type: 'info'}];
 
-                    // Join logic
                     await updateDoc(gameRef, {
                         "players.blue": myUserId,
                         status: 'playing',
@@ -360,11 +361,11 @@
                     // Sync State
                     game.board = JSON.parse(data.board);
                     game.turn = data.turn;
-                    game.stats = data.stats; // This will now have correct data
+                    game.stats = data.stats; 
                     game.forcedPiece = data.forcedPiece;
                     game.winner = data.winner;
                     
-                    // Sync Logs (Safely)
+                    // Sync Logs Safely
                     const logContainer = document.getElementById('game-log');
                     logContainer.innerHTML = '';
                     if(data.logs && Array.isArray(data.logs)) {
@@ -384,7 +385,7 @@
         window.game = {
             board: [],
             turn: 'red',
-            // FIX: Initialize stats locally too
+            // FIX: Initial Stats added here locally as well
             stats: { 
                 red: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 }, 
                 blue: { level: 1, xp: 0, xpNext: 100, mana: 2, maxMana: 5 } 
@@ -572,8 +573,7 @@
                     }));
                 }
 
-                await this.pushUpdate(nextBoard, nextStats, nextTurn, nextForcedPiece, logMsg || "Moved piece", logType);
-                this.selected = null;
+                this.checkWinCondition(nextBoard, nextStats, nextTurn, nextForcedPiece, logMsg, logType);
             },
 
             activateSpell(spellName) {
@@ -650,8 +650,49 @@
                     }
                 }));
 
-                await this.pushUpdate(nextBoard, nextStats, nextTurn, null, logMsg, 'magic');
+                this.checkWinCondition(nextBoard, nextStats, nextTurn, null, logMsg, 'magic');
                 this.activeSpell = null;
+            },
+
+            // Consolidated Update + Win Check Logic
+            checkWinCondition(nextBoard, nextStats, nextTurn, nextForcedPiece, logMsg, logType) {
+                // Safety: Do not check win on empty board
+                if(!nextBoard || nextBoard.length === 0) return;
+
+                const redAlive = nextBoard.some(row => row.some(c => c.piece?.player === 'red'));
+                const blueAlive = nextBoard.some(row => row.some(c => c.piece?.player === 'blue'));
+                
+                let winner = null;
+                if (!redAlive) winner = 'blue';
+                if (!blueAlive) winner = 'red';
+
+                // If we found a winner, we need to update that in DB
+                this.pushUpdate(nextBoard, nextStats, nextTurn, nextForcedPiece, logMsg, logType, winner);
+                this.selected = null;
+            },
+
+            // Updated Push Update to include Winner
+            async pushUpdate(newBoard, newStats, nextTurn, newForcedPiece, logMsg, logType, winner = null) {
+                if(!myRoomId) return;
+                
+                const gameRef = doc(db, "games", myRoomId);
+                const snap = await getDoc(gameRef);
+                const currentLogs = snap.data().logs || [];
+                const newLogs = [...currentLogs, {msg: logMsg, type: logType}];
+
+                const updateData = {
+                    board: JSON.stringify(newBoard),
+                    stats: newStats,
+                    turn: nextTurn,
+                    forcedPiece: newForcedPiece,
+                    logs: newLogs
+                };
+
+                if (winner) {
+                    updateData.winner = winner;
+                }
+
+                await updateDoc(gameRef, updateData);
             },
 
             isValid(r, c) { return r>=0 && r<8 && c>=0 && c<8; },
@@ -669,10 +710,6 @@
                 document.getElementById('winner-name').textContent = winner + " WINS!";
                 document.getElementById('winner-name').style.color = winner === 'red' ? 'var(--red-400)' : 'var(--blue-400)';
                 document.getElementById('win-modal').classList.add('active');
-                
-                if(myRoomId) {
-                     updateDoc(doc(db, "games", myRoomId), { winner: winner });
-                }
             },
 
             render() {
